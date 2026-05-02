@@ -1,3 +1,16 @@
+import sys
+import types
+
+# Фикс для imghdr в Python 3.13+
+if sys.version_info >= (3, 13):
+    try:
+        import imghdr
+    except ImportError:
+        imghdr = types.ModuleType('imghdr')
+        def what(file, h=None):
+            return None
+        imghdr.what = what
+        sys.modules['imghdr'] = imghdr
 import logging
 import os
 from datetime import date
