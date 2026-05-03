@@ -38,6 +38,7 @@ CLASSES = [
 ]
 
 EXP_COST_PER_STAT = 100
+COOLDOWN_SECONDS = 20  # КД 20 секунд
 
 def get_avatars_path():
     return os.path.join(os.path.dirname(__file__), "avatars")
@@ -167,6 +168,34 @@ def show_character_card(update, context, character_name):
         pass
 
 def show_main_menu(update, context, player):
+    # Получаем бонусы от оружия и брони для отображения
+    player_class = get_player_class(player['character_name'])
+    weapon_name = player.get('weapon', 'Нет')
+    armor_name = player.get('armor', 'Нет')
+    
+    weapon_bonus_str = 0
+    weapon_bonus_mag = 0
+    armor_bonus_hp = 0
+    
+    for weapon in WEAPONS[player_class]:
+        if weapon['name'] == weapon_name:
+            weapon_bonus_str = weapon.get('bonus_strength', 0)
+            weapon_bonus_mag = weapon.get('bonus_magic', 0)
+            break
+    
+    for armor in ARMOR[player_class]:
+        if armor['name'] == armor_name:
+            armor_bonus_hp = armor.get('bonus_hp', 0)
+            break
+    
+    weapon_text = f"{weapon_name}"
+    if weapon_bonus_str > 0 or weapon_bonus_mag > 0:
+        weapon_text += f" (+{weapon_bonus_str}⚔️ +{weapon_bonus_mag}✨)"
+    
+    armor_text = f"{armor_name}"
+    if armor_bonus_hp > 0:
+        armor_text += f" (+{armor_bonus_hp}❤️)"
+    
     text = (f"👤 {player['character_name']}\n"
             f"❤️ {player['hp']}/{player['max_hp']} HP\n"
             f"💙 {player['mana']}/{player['max_mana']} MP\n"
@@ -175,8 +204,8 @@ def show_main_menu(update, context, player):
             f"🌟 XP: {player['xp']}/{get_next_xp(player['level'])} (ур. {player['level']})\n"
             f"💰 Золото: {player['gold']}\n"
             f"⚡ Power Score: {player.get('power_score', 0)}\n"
-            f"⚔️ Оружие: {player.get('weapon', 'Нет')}\n"
-            f"🛡️ Броня: {player.get('armor', 'Нет')}")
+            f"⚔️ Оружие: {weapon_text}\n"
+            f"🛡️ Броня: {armor_text}")
     
     photo_path = player.get("photo_path")
     
@@ -856,8 +885,9 @@ def button_handler(update, context):
         
         add_item_to_inventory(user.id, weapon['name'], "weapon", player_class, weapon['bonus_strength'], weapon['bonus_magic'], 0)
         
-        user_items = get_user_items(user.id)
-        for item in user_items:
+        # Обновляем user_items и надеваем
+        _, _, _, _, fresh_items = get_player(user.id)
+        for item in fresh_items:
             if item['item_name'] == weapon['name'] and item['item_type'] == "weapon":
                 equip_item(user.id, item['item_id'])
                 break
@@ -916,8 +946,9 @@ def button_handler(update, context):
         
         add_item_to_inventory(user.id, armor['name'], "armor", player_class, 0, 0, armor['bonus_hp'])
         
-        user_items = get_user_items(user.id)
-        for item in user_items:
+        # Обновляем user_items и надеваем
+        _, _, _, _, fresh_items = get_player(user.id)
+        for item in fresh_items:
             if item['item_name'] == armor['name'] and item['item_type'] == "armor":
                 equip_item(user.id, item['item_id'])
                 break
