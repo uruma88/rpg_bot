@@ -8,6 +8,11 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from config import TOKEN
 from db import init_db, get_player, create_player, update_player, update_inventory, set_character, add_loot_item, remove_loot_item, add_material, remove_material, add_item_to_inventory, get_user_items, equip_item, unequip_item, update_power_score, get_leaderboard_by_power, get_leaderboard_by_level, get_leaderboard_by_pvp
 from game import fight, get_next_xp, LOOT_VALUES, WEAPONS, ARMOR, get_weapon_upgrade, get_armor_upgrade
+from db import (init_db, get_player, create_player, update_player, update_inventory, 
+                set_character, add_loot_item, remove_loot_item, add_material, remove_material, 
+                add_item_to_inventory, get_user_items, equip_item, unequip_item, 
+                update_power_score, get_leaderboard_by_power, get_leaderboard_by_level, 
+                get_leaderboard_by_pvp, can_fight, set_last_fight)
 
 logging.basicConfig(level=logging.INFO)
 init_db()
