@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "players.db")
 
@@ -265,7 +266,6 @@ def can_fight(user_id):
         if not player or not player["last_fight"]:
             return True, 0
         
-        from datetime import datetime
         last_fight = datetime.fromisoformat(player["last_fight"])
         now = datetime.now()
         seconds_passed = (now - last_fight).total_seconds()
@@ -279,6 +279,5 @@ def can_fight(user_id):
 
 def set_last_fight(user_id):
     """Обновляет время последнего боя"""
-    from datetime import datetime
     with get_db() as conn:
         conn.execute("UPDATE players SET last_fight = ? WHERE user_id = ?", (datetime.now().isoformat(), user_id))
