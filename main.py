@@ -857,7 +857,7 @@ def button_handler(update, context):
             pass
         return
     
-    if data.startswith("buy_armor_"):
+     if data.startswith("buy_armor_"):
         idx = int(data.split("_")[2])
         player_class = get_player_class(player['character_name'])
         armor = ARMOR[player_class][idx]
@@ -880,9 +880,26 @@ def button_handler(update, context):
         new_gold = player['gold'] - armor['cost']
         update_player(user.id, {"gold": new_gold})
         
+        # Добавляем броню в инвентарь
         add_item_to_inventory(user.id, armor['name'], "armor", player_class, 0, 0, armor['bonus_hp'])
         
-        query.message.reply_text(f"✅ Вы купили {armor['name']}!\nТеперь наденьте её в меню 'Экипировка'", reply_markup=get_back_keyboard())
+        # Автоматически надеваем броню (если нет надетой или лучше)
+        current_armor = player.get("armor", "Нет")
+        
+        # Сначала снимаем текущую броню (если есть)
+        if current_armor != "Нет":
+            unequip_item(user.id, "armor")
+        
+        # Находим ID купленной брони
+        user_items = get_user_items(user.id)
+        for item in user_items:
+            if item['item_name'] == armor['name'] and item['item_type'] == "armor":
+                equip_item(user.id, item['item_id'])
+                break
+        
+        update_power_score(user.id)
+        
+        query.message.reply_text(f"✅ Вы купили и надели {armor['name']}!\n+{armor['bonus_hp']}❤️ к HP!", reply_markup=get_back_keyboard())
         query.message.delete()
         return
     
