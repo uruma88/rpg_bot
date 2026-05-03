@@ -269,7 +269,7 @@ def can_fight(user_id):
         last_fight = datetime.fromisoformat(player["last_fight"])
         now = datetime.now()
         seconds_passed = (now - last_fight).total_seconds()
-        cooldown = 30  # 30 секунд КД
+        cooldown = 20  # 30 секунд КД
         
         if seconds_passed >= cooldown:
             return True, 0
