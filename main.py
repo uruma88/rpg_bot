@@ -143,8 +143,10 @@ def show_main_menu(update, context, player):
             f"💰 Золото: {player['gold']}\n"
             f"🔧 {player.get('weapon', 'Нет оружия')} | {player.get('armor', 'Нет брони')}")
     
+    # Отправляем новое сообщение вместо редактирования
     if update.callback_query:
-        update.callback_query.edit_message_text(text, reply_markup=get_main_keyboard())
+        update.callback_query.message.reply_text(text, reply_markup=get_main_keyboard())
+        update.callback_query.message.delete()
     else:
         update.message.reply_text(text, reply_markup=get_main_keyboard())
 
@@ -219,6 +221,7 @@ def button_handler(update, context):
         query.edit_message_text("Сначала выбери персонажа: /start")
         return
     
+    # Обработка кнопок главного меню
     if data == "profile":
         show_main_menu(update, context, player)
     
