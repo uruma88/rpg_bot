@@ -34,7 +34,8 @@ def init_db():
                 armor_level INTEGER DEFAULT 1,
                 pvp_wins INTEGER DEFAULT 0,
                 pvp_losses INTEGER DEFAULT 0,
-                power_score INTEGER DEFAULT 0
+                power_score INTEGER DEFAULT 0,
+                skill_points INTEGER DEFAULT 0
             )
         """)
         conn.execute("""
@@ -94,7 +95,7 @@ def get_player(user_id):
 
 def create_player(user_id, name):
     with get_db() as conn:
-        conn.execute("INSERT INTO players (user_id, name, power_score) VALUES (?, ?, 0)", (user_id, name))
+        conn.execute("INSERT INTO players (user_id, name, power_score, skill_points) VALUES (?, ?, 0, 0)", (user_id, name))
 
 def update_player(user_id, data):
     with get_db() as conn:
@@ -167,20 +168,15 @@ def get_user_items(user_id, item_type=None):
 
 def equip_item(user_id, item_id):
     with get_db() as conn:
-        # Исправлено: колонка называется item_id, а не id
         item = conn.execute("SELECT * FROM user_items WHERE item_id = ? AND user_id = ?", (item_id, user_id)).fetchone()
         if not item:
             return False, "Предмет не найден"
         
         item_type = item["item_type"]
         
-        # Снимаем текущий предмет того же типа
         conn.execute("UPDATE user_items SET equipped = 0 WHERE user_id = ? AND item_type = ? AND equipped = 1", (user_id, item_type))
-        
-        # Надеваем новый
         conn.execute("UPDATE user_items SET equipped = 1 WHERE item_id = ?", (item_id,))
         
-        # Обновляем статы игрока
         player = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
         
         if item_type == "weapon":
@@ -198,7 +194,6 @@ def equip_item(user_id, item_id):
 
 def unequip_item(user_id, item_type):
     with get_db() as conn:
-        # Исправлено: ищем по item_id
         item = conn.execute("SELECT * FROM user_items WHERE user_id = ? AND item_type = ? AND equipped = 1", (user_id, item_type)).fetchone()
         if not item:
             return False, f"Нет надетого предмета типа {item_type}"
@@ -262,7 +257,6 @@ def get_leaderboard_by_pvp(limit=10):
         return [dict(p) for p in players]
 
 def can_fight(user_id):
-    """Проверяет, может ли игрок сражаться (не на CD)"""
     with get_db() as conn:
         player = conn.execute("SELECT last_fight FROM players WHERE user_id = ?", (user_id,)).fetchone()
         if not player or not player["last_fight"]:
@@ -271,7 +265,7 @@ def can_fight(user_id):
         last_fight = datetime.fromisoformat(player["last_fight"])
         now = datetime.now()
         seconds_passed = (now - last_fight).total_seconds()
-        cooldown = 20  # 20 секунд КД
+        cooldown = 20
         
         if seconds_passed >= cooldown:
             return True, 0
@@ -280,21 +274,5 @@ def can_fight(user_id):
             return False, remaining
 
 def set_last_fight(user_id):
-    """Обновляет время последнего боя"""
     with get_db() as conn:
         conn.execute("UPDATE players SET last_fight = ? WHERE user_id = ?", (datetime.now().isoformat(), user_id))
-
-# В таблице players добавить колонку skill_points
-conn.execute("""
-    CREATE TABLE IF NOT EXISTS players (
-        ... существующие поля ...
-        skill_points INTEGER DEFAULT 0,
-        ...
-    )
-""")
-
-# Или если таблица уже существует, добавить колонку:
-try:
-    conn.execute("ALTER TABLE players ADD COLUMN skill_points INTEGER DEFAULT 0")
-except:
-    pass
