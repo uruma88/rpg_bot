@@ -167,7 +167,8 @@ def get_user_items(user_id, item_type=None):
 
 def equip_item(user_id, item_id):
     with get_db() as conn:
-        item = conn.execute("SELECT * FROM user_items WHERE id = ? AND user_id = ?", (item_id, user_id)).fetchone()
+        # Исправлено: колонка называется item_id, а не id
+        item = conn.execute("SELECT * FROM user_items WHERE item_id = ? AND user_id = ?", (item_id, user_id)).fetchone()
         if not item:
             return False, "Предмет не найден"
         
@@ -177,7 +178,7 @@ def equip_item(user_id, item_id):
         conn.execute("UPDATE user_items SET equipped = 0 WHERE user_id = ? AND item_type = ? AND equipped = 1", (user_id, item_type))
         
         # Надеваем новый
-        conn.execute("UPDATE user_items SET equipped = 1 WHERE id = ?", (item_id,))
+        conn.execute("UPDATE user_items SET equipped = 1 WHERE item_id = ?", (item_id,))
         
         # Обновляем статы игрока
         player = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
@@ -197,11 +198,12 @@ def equip_item(user_id, item_id):
 
 def unequip_item(user_id, item_type):
     with get_db() as conn:
+        # Исправлено: ищем по item_id
         item = conn.execute("SELECT * FROM user_items WHERE user_id = ? AND item_type = ? AND equipped = 1", (user_id, item_type)).fetchone()
         if not item:
             return False, f"Нет надетого предмета типа {item_type}"
         
-        conn.execute("UPDATE user_items SET equipped = 0 WHERE id = ?", (item["id"],))
+        conn.execute("UPDATE user_items SET equipped = 0 WHERE item_id = ?", (item["item_id"],))
         
         player = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
         
@@ -269,7 +271,7 @@ def can_fight(user_id):
         last_fight = datetime.fromisoformat(player["last_fight"])
         now = datetime.now()
         seconds_passed = (now - last_fight).total_seconds()
-        cooldown = 20  # 30 секунд КД
+        cooldown = 20  # 20 секунд КД
         
         if seconds_passed >= cooldown:
             return True, 0
