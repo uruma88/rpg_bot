@@ -27,7 +27,9 @@ def init_db():
                 gold INTEGER DEFAULT 200,
                 last_daily TEXT,
                 weapon TEXT DEFAULT 'Нет',
+                weapon_level INTEGER DEFAULT 1,
                 armor TEXT DEFAULT 'Нет',
+                armor_level INTEGER DEFAULT 1,
                 pvp_wins INTEGER DEFAULT 0,
                 pvp_losses INTEGER DEFAULT 0
             )
@@ -48,17 +50,27 @@ def init_db():
                 PRIMARY KEY(user_id, item_name)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS materials (
+                user_id INTEGER,
+                material_name TEXT,
+                quantity INTEGER,
+                PRIMARY KEY(user_id, material_name)
+            )
+        """)
 
 def get_player(user_id):
     with get_db() as conn:
         player = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
         if not player:
-            return None, {}, {}
+            return None, {}, {}, {}
         inv = conn.execute("SELECT item_type, quantity FROM inventory WHERE user_id = ?", (user_id,)).fetchall()
         inventory = {row["item_type"]: row["quantity"] for row in inv}
         loot = conn.execute("SELECT item_name, item_value FROM loot_items WHERE user_id = ?", (user_id,)).fetchall()
         loot_items = {row["item_name"]: row["item_value"] for row in loot}
-        return dict(player), inventory, loot_items
+        mats = conn.execute("SELECT material_name, quantity FROM materials WHERE user_id = ?", (user_id,)).fetchall()
+        materials = {row["material_name"]: row["quantity"] for row in mats}
+        return dict(player), inventory, loot_items, materials
 
 def create_player(user_id, name):
     with get_db() as conn:
@@ -92,6 +104,27 @@ def remove_loot_item(user_id, item_name):
     with get_db() as conn:
         conn.execute("DELETE FROM loot_items WHERE user_id = ? AND item_name = ?", (user_id, item_name))
 
+def add_material(user_id, material_name, quantity):
+    with get_db() as conn:
+        cur = conn.execute("SELECT quantity FROM materials WHERE user_id = ? AND material_name = ?", (user_id, material_name))
+        row = cur.fetchone()
+        if row:
+            new_qty = row["quantity"] + quantity
+            conn.execute("UPDATE materials SET quantity = ? WHERE user_id = ? AND material_name = ?", (new_qty, user_id, material_name))
+        else:
+            conn.execute("INSERT INTO materials (user_id, material_name, quantity) VALUES (?, ?, ?)", (user_id, material_name, quantity))
+
+def remove_material(user_id, material_name, quantity):
+    with get_db() as conn:
+        cur = conn.execute("SELECT quantity FROM materials WHERE user_id = ? AND material_name = ?", (user_id, material_name))
+        row = cur.fetchone()
+        if row:
+            new_qty = row["quantity"] - quantity
+            if new_qty <= 0:
+                conn.execute("DELETE FROM materials WHERE user_id = ? AND material_name = ?", (user_id, material_name))
+            else:
+                conn.execute("UPDATE materials SET quantity = ? WHERE user_id = ? AND material_name = ?", (new_qty, user_id, material_name))
+
 def set_character(user_id, character_name, photo_path):
     with get_db() as conn:
         conn.execute("UPDATE players SET character_name = ?, photo_path = ? WHERE user_id = ?", (character_name, photo_path, user_id))
@@ -100,21 +133,10 @@ def set_character(user_id, character_name, photo_path):
 def get_leaderboard(limit=10):
     with get_db() as conn:
         players = conn.execute("""
-            SELECT name, character_name, level, pvp_wins 
+            SELECT user_id, name, character_name, level, pvp_wins 
             FROM players 
             WHERE character_name IS NOT NULL 
             ORDER BY level DESC, pvp_wins DESC 
             LIMIT ?
         """, (limit,)).fetchall()
-        return players
-
-def get_pvp_leaderboard(limit=10):
-    with get_db() as conn:
-        players = conn.execute("""
-            SELECT name, character_name, pvp_wins, pvp_losses 
-            FROM players 
-            WHERE character_name IS NOT NULL AND (pvp_wins > 0 OR pvp_losses > 0)
-            ORDER BY pvp_wins DESC 
-            LIMIT ?
-        """, (limit,)).fetchall()
-        return players
+        return [dict(p) for p in players]
