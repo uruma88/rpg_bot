@@ -1019,7 +1019,112 @@ def button_handler(update, context):
             query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP", reply_markup=get_back_keyboard())
             query.message.delete()
         return
-
+    # Экипировка
+    if data == "equipment":
+        player_class = get_player_class(player['character_name'])
+        current_weapon = player.get('weapon', 'Нет')
+        current_armor = player.get('armor', 'Нет')
+        
+        # Находим бонусы текущего оружия
+        weapon_bonus_strength = 0
+        weapon_bonus_magic = 0
+        for weapon in WEAPONS[player_class]:
+            if weapon['name'] == current_weapon:
+                weapon_bonus_strength = weapon.get('bonus_strength', 0)
+                weapon_bonus_magic = weapon.get('bonus_magic', 0)
+                break
+        
+        # Находим бонусы текущей брони
+        armor_bonus_hp = 0
+        for armor in ARMOR[player_class]:
+            if armor['name'] == current_armor:
+                armor_bonus_hp = armor.get('bonus_hp', 0)
+                break
+        
+        text = ("⚔️ ЭКИПИРОВКА ⚔️\n\n"
+                f"🗡️ ОРУЖИЕ: {current_weapon}\n"
+                f"   +{weapon_bonus_strength}⚔️ к силе\n"
+                f"   +{weapon_bonus_magic}✨ к магии\n\n"
+                f"🛡️ БРОНЯ: {current_armor}\n"
+                f"   +{armor_bonus_hp}❤️ к HP\n\n"
+                "Выбери действие:")
+        
+        keyboard = [
+            [InlineKeyboardButton("⚔️ Сменить оружие", callback_data="change_weapon")],
+            [InlineKeyboardButton("🛡️ Сменить броню", callback_data="change_armor")],
+            [InlineKeyboardButton("🗑️ Снять всё", callback_data="unequip_all")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="profile")],
+        ]
+        try:
+            query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+            query.message.delete()
+        except:
+            pass
+        return
+    
+    if data == "change_weapon":
+        # Здесь нужно показывать список купленного оружия из отдельной таблицы
+        # Для простоты покажем, что нужно сначала купить оружие в магазине
+        query.message.reply_text(
+            "⚔️ СМЕНА ОРУЖИЯ ⚔️\n\n"
+            "Пока эта функция в разработке.\n\n"
+            "Купи оружие в магазине, и оно автоматически наденется!\n"
+            "Скоро добавим возможность переодеваться.",
+            reply_markup=get_back_keyboard()
+        )
+        query.message.delete()
+        return
+    
+    if data == "change_armor":
+        query.message.reply_text(
+            "🛡️ СМЕНА БРОНИ 🛡️\n\n"
+            "Пока эта функция в разработке.\n\n"
+            "Купи броню в магазине, и она автоматически наденется!\n"
+            "Скоро добавим возможность переодеваться.",
+            reply_markup=get_back_keyboard()
+        )
+        query.message.delete()
+        return
+    
+    if data == "unequip_all":
+        current_weapon = player.get('weapon', 'Нет')
+        current_armor = player.get('armor', 'Нет')
+        
+        # Снимаем оружие (возвращаем базовые статы)
+        player_class = get_player_class(player['character_name'])
+        weapon_bonus_strength = 0
+        weapon_bonus_magic = 0
+        for weapon in WEAPONS[player_class]:
+            if weapon['name'] == current_weapon:
+                weapon_bonus_strength = weapon.get('bonus_strength', 0)
+                weapon_bonus_magic = weapon.get('bonus_magic', 0)
+                break
+        
+        armor_bonus_hp = 0
+        for armor in ARMOR[player_class]:
+            if armor['name'] == current_armor:
+                armor_bonus_hp = armor.get('bonus_hp', 0)
+                break
+        
+        new_strength = player['strength'] - weapon_bonus_strength
+        new_magic = player['magic'] - weapon_bonus_magic
+        new_max_hp = player['max_hp'] - armor_bonus_hp
+        new_hp = min(player['hp'], new_max_hp)
+        
+        update_player(user.id, {
+            "strength": new_strength,
+            "magic": new_magic,
+            "max_hp": new_max_hp,
+            "hp": new_hp,
+            "weapon": "Нет",
+            "armor": "Нет"
+        })
+        update_power_score(user.id)
+        
+        query.message.reply_text("✅ Вы сняли всю экипировку!", reply_markup=get_back_keyboard())
+        query.message.delete()
+        return
+        
 def main():
     updater = Updater(TOKEN)
     dp = updater.dispatcher
