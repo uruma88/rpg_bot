@@ -303,7 +303,9 @@ def button_handler(update, context):
             query.edit_message_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
 
 def main():
-    updater = Updater(TOKEN, use_context=True)
+    from telegram.ext import Updater
+    
+    updater = Updater(TOKEN)
     dp = updater.dispatcher
     
     dp.add_handler(CommandHandler("start", start))
