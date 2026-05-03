@@ -3,7 +3,7 @@ import os
 from datetime import date
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
-
+ф
 from config import TOKEN
 from db import init_db, get_player, create_player, update_player, update_inventory, set_character
 from game import fight, get_next_xp
