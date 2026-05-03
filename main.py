@@ -18,7 +18,7 @@ FRIENDS = [
     {"name": "Ваня", "photo": "ваня.jpg", "strength": 14, "magic": 16, "hp": 105},
     {"name": "Егор", "photo": "егор.jpg", "strength": 17, "magic": 13, "hp": 115},
     {"name": "Илюха", "photo": "илюха.jpg", "strength": 15, "magic": 15, "hp": 100},
-    {"name": "Капрал", "photo": "капрал.jpg", "strength": 20, "magic": 8, "hp": 120},
+    {"name": "Капрал", "photo": "капрал.jpg", "strength": 20, "magic": 8, "hp": 130},
     {"name": "Кирилл", "photo": "кирилл.jpg", "strength": 13, "magic": 17, "hp": 100},
     {"name": "Лера", "photo": "лера.jpg", "strength": 10, "magic": 20, "hp": 90},
     {"name": "Никитос", "photo": "никитос.jpg", "strength": 16, "magic": 14, "hp": 110},
@@ -143,12 +143,20 @@ def show_main_menu(update, context, player):
             f"💰 Золото: {player['gold']}\n"
             f"🔧 {player.get('weapon', 'Нет оружия')} | {player.get('armor', 'Нет брони')}")
     
-    # Отправляем новое сообщение вместо редактирования
-    if update.callback_query:
-        update.callback_query.message.reply_text(text, reply_markup=get_main_keyboard())
-        update.callback_query.message.delete()
+    # Отправляем сообщение с фото, если есть
+    photo_path = player.get("photo_path")
+    if photo_path and os.path.exists(photo_path):
+        with open(photo_path, 'rb') as photo:
+            if update.callback_query:
+                update.callback_query.message.reply_photo(photo, caption=text, reply_markup=get_main_keyboard())
+                update.callback_query.message.delete()
+            else:
+                update.message.reply_photo(photo, caption=text, reply_markup=get_main_keyboard())
     else:
-        update.message.reply_text(text, reply_markup=get_main_keyboard())
+        if update.callback_query:
+            update.callback_query.edit_message_text(text, reply_markup=get_main_keyboard())
+        else:
+            update.message.reply_text(text, reply_markup=get_main_keyboard())
 
 def button_handler(update, context):
     query = update.callback_query
@@ -221,7 +229,6 @@ def button_handler(update, context):
         query.edit_message_text("Сначала выбери персонажа: /start")
         return
     
-    # Обработка кнопок главного меню
     if data == "profile":
         show_main_menu(update, context, player)
     
@@ -283,6 +290,8 @@ def button_handler(update, context):
             new_strength = player["strength"] + 1
             update_player(user.id, {"xp": new_xp, "strength": new_strength})
             query.edit_message_text(f"💪 Сила увеличена до {new_strength}!")
+            player, _ = get_player(user.id)
+            show_main_menu(update, context, player)
         else:
             query.edit_message_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
     
@@ -292,6 +301,8 @@ def button_handler(update, context):
             new_magic = player["magic"] + 1
             update_player(user.id, {"xp": new_xp, "magic": new_magic})
             query.edit_message_text(f"✨ Магия увеличена до {new_magic}!")
+            player, _ = get_player(user.id)
+            show_main_menu(update, context, player)
         else:
             query.edit_message_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
     
@@ -302,6 +313,8 @@ def button_handler(update, context):
             new_hp = player["hp"] + 10
             update_player(user.id, {"xp": new_xp, "max_hp": new_max_hp, "hp": new_hp})
             query.edit_message_text(f"❤️ HP увеличено до {new_max_hp}!")
+            player, _ = get_player(user.id)
+            show_main_menu(update, context, player)
         else:
             query.edit_message_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
 
