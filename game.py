@@ -60,7 +60,6 @@ BOSSES = {
 }
 
 LOOT_VALUES = {
-    # Монеты и материалы (меняем цену)
     "Серая шерсть": 5, "Мелкий осколок": 8, "Светящийся спермаций": 10, "Грибная слизь": 6,
     "Гоблинская серьга": 15, "Медная пряжка": 12, "Волчья шерсть": 20, "Кровь хищника": 25,
     "Орочья кость": 30, "Грубая сталь": 25, "Паутинная нить": 15, "Ядовитая железа": 20,
@@ -72,8 +71,6 @@ LOOT_VALUES = {
     "Драконье сердце": 200, "Пламенный камень": 150, "Магический шар": 180, "Мудрый камень": 160,
     "Чёрный жемчуг": 250, "Теневой кристалл": 220, "Адская сталь": 300, "Демоническая кровь": 280,
     "Древний артефакт": 400, "Корона власти": 350,
-    
-    # Обычный лут
     "Крысиный хвост": 15, "Гнилой зуб": 10, "Споры": 20, "Ядовитый гриб": 25,
     "Гоблинская сабля": 50, "Рваная накидка": 30, "Волчья шкура": 40, "Острый клык": 35,
     "Орочья дубина": 60, "Потёртый шлем": 45, "Паутина": 25, "Ядовитые клыки": 50,
@@ -164,30 +161,16 @@ def get_enemy_for_level(player_level):
     return random.choice(available).copy()
 
 def get_weapon_upgrade(weapon_name, player_class):
-    """Получить информацию об улучшении оружия"""
     for weapon in WEAPONS[player_class]:
         if weapon["name"] == weapon_name:
             return weapon.get("upgrade_cost"), weapon.get("upgrade_bonus", 0)
     return None, 0
 
 def get_armor_upgrade(armor_name, player_class):
-    """Получить информацию об улучшении брони"""
     for armor in ARMOR[player_class]:
         if armor["name"] == armor_name:
             return armor.get("upgrade_cost"), armor.get("upgrade_bonus", 0)
     return None, 0
-
-def can_use_item(player, item, item_type):
-    """Проверка, может ли игрок использовать предмет"""
-    if item_type == "weapon":
-        req_strength = item.get("strength_req", 0)
-        req_magic = item.get("magic_req", 0)
-        return player["strength"] >= req_strength and player["magic"] >= req_magic
-    elif item_type == "armor":
-        req_strength = item.get("strength_req", 0)
-        req_magic = item.get("magic_req", 0)
-        return player["strength"] >= req_strength and player["magic"] >= req_magic
-    return True
 
 def fight(player, inventory, loot_items, materials, is_boss=False):
     if is_boss and player["level"] in BOSSES:
@@ -221,7 +204,7 @@ def fight(player, inventory, loot_items, materials, is_boss=False):
             if random.random() < 0.6 and enemy.get("materials"):
                 material_dropped = random.choice(enemy["materials"])
                 material_value = LOOT_VALUES.get(material_dropped, 20)
-                log.append(f"🔧 Вам выпал материал: {material_dropped} (для улучшения оружия/брони)")
+                log.append(f"🔧 Вам выпал материал: {material_dropped}")
             
             new_xp = player["xp"] + xp_gain
             old_level = player["level"]
