@@ -57,6 +57,7 @@ def get_main_keyboard():
         [InlineKeyboardButton("🏆 Рейтинг", callback_data="leaderboard_menu")],
         [InlineKeyboardButton("⚔️ PvP Бой", callback_data="pvp")],
         [InlineKeyboardButton("👤 Профиль", callback_data="profile")],
+        [InlineKeyboardButton("⚔️ Экипировка", callback_data="equipment")],  # Новая кнопка
         [InlineKeyboardButton("🎒 Инвентарь", callback_data="inv")],
         [InlineKeyboardButton("💊 Зелье", callback_data="potion")],
         [InlineKeyboardButton("📈 Прокачка", callback_data="upgrade")],
