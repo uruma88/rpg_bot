@@ -1,11 +1,13 @@
 import logging
 import os
+import random
 from datetime import date
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
+
 from config import TOKEN
-from db import init_db, get_player, create_player, update_player, update_inventory, set_character
-from game import fight, get_next_xp
+from db import init_db, get_player, create_player, update_player, update_inventory, set_character, add_loot_item, remove_loot_item, get_leaderboard, get_pvp_leaderboard
+from game import fight, get_next_xp, LOOT_VALUES
 
 logging.basicConfig(level=logging.INFO)
 init_db()
@@ -43,10 +45,14 @@ def get_avatars_path():
 def get_main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⚔️ Сражаться", callback_data="fight")],
+        [InlineKeyboardButton("🏆 Рейтинг", callback_data="leaderboard")],
+        [InlineKeyboardButton("⚔️ PvP Бой", callback_data="pvp")],
         [InlineKeyboardButton("👤 Профиль", callback_data="profile")],
         [InlineKeyboardButton("🎒 Инвентарь", callback_data="inv")],
         [InlineKeyboardButton("💊 Зелье", callback_data="potion")],
         [InlineKeyboardButton("📈 Прокачка", callback_data="upgrade")],
+        [InlineKeyboardButton("🛒 Магазин", callback_data="shop")],
+        [InlineKeyboardButton("💰 Продать лут", callback_data="sell_loot")],
         [InlineKeyboardButton("🎁 Награда", callback_data="daily")],
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -82,15 +88,9 @@ def get_class_keyboard(character_name):
     keyboard.append([InlineKeyboardButton("🔙 Назад к списку", callback_data="back_to_list")])
     return InlineKeyboardMarkup(keyboard)
 
-def send_message(chat_id, text, reply_markup=None, photo_path=None):
-    """Вспомогательная функция для отправки сообщений"""
-    # Здесь мы не можем напрямую отправить, так как нет update
-    # Будем использовать в функциях с update
-    pass
-
 def start(update, context):
     user = update.effective_user
-    player, _ = get_player(user.id)
+    player, _, _ = get_player(user.id)
     
     if not player:
         create_player(user.id, user.first_name)
@@ -108,9 +108,11 @@ def start(update, context):
 
 def show_character_list(update, context, page=0):
     text = "📋 ВЫБЕРИ ПЕРСОНАЖА:\n\nНажми на имя, чтобы увидеть статы и фото:"
-    # Отправляем новое сообщение вместо редактирования
-    update.callback_query.message.reply_text(text, reply_markup=get_character_list_keyboard(page))
-    update.callback_query.message.delete()
+    if update.callback_query:
+        update.callback_query.message.reply_text(text, reply_markup=get_character_list_keyboard(page))
+        update.callback_query.message.delete()
+    else:
+        update.message.reply_text(text, reply_markup=get_character_list_keyboard(page))
 
 def show_character_card(update, context, character_name):
     friend = None
@@ -147,17 +149,16 @@ def show_main_menu(update, context, player):
             f"❤️ {player['hp']}/{player['max_hp']} HP\n"
             f"💙 {player['mana']}/{player['max_mana']} MP\n"
             f"⚔️ Сила: {player['strength']}  ✨ Магия: {player['magic']}\n"
+            f"🏆 PvP побед: {player.get('pvp_wins', 0)} / поражений: {player.get('pvp_losses', 0)}\n"
             f"🌟 XP: {player['xp']}/{get_next_xp(player['level'])}\n"
             f"💰 Золото: {player['gold']}\n"
             f"🔧 {player.get('weapon', 'Нет оружия')} | {player.get('armor', 'Нет брони')}")
     
     photo_path = player.get("photo_path")
     
-    # Удаляем старое сообщение, если оно от callback
     if update.callback_query:
         update.callback_query.message.delete()
     
-    # Отправляем новое сообщение с фото или без
     if photo_path and os.path.exists(photo_path):
         with open(photo_path, 'rb') as photo:
             if update.callback_query:
@@ -170,13 +171,49 @@ def show_main_menu(update, context, player):
         else:
             update.message.reply_text(text, reply_markup=get_main_keyboard())
 
+async def pvp_fight(player1, player2):
+    """PvP бой между двумя игроками"""
+    p1_hp = player1["hp"]
+    p2_hp = player2["hp"]
+    log = []
+    
+    # Кто ходит первым (рандом)
+    turn = random.choice([1, 2])
+    
+    while p1_hp > 0 and p2_hp > 0:
+        if turn == 1:
+            damage = random.randint(5, player1["strength"] + 5)
+            p2_hp -= damage
+            log.append(f"⚔️ {player1['character_name']} нанёс {damage} урона {player2['character_name']}. У соперника {max(0, p2_hp)} HP.")
+            turn = 2
+        else:
+            damage = random.randint(5, player2["strength"] + 5)
+            p1_hp -= damage
+            log.append(f"⚔️ {player2['character_name']} нанёс {damage} урона {player1['character_name']}. У вас {max(0, p1_hp)} HP.")
+            turn = 1
+    
+    if p1_hp > 0:
+        log.append(f"🎉 ПОБЕДА! {player1['character_name']} одержал победу над {player2['character_name']}!")
+        winner = player1
+        loser = player2
+    else:
+        log.append(f"💀 ПОРАЖЕНИЕ! {player1['character_name']} проиграл {player2['character_name']}!")
+        winner = player2
+        loser = player1
+    
+    # Обновляем статистику
+    update_player(winner["user_id"], {"pvp_wins": winner.get("pvp_wins", 0) + 1, "hp": winner["hp"]})
+    update_player(loser["user_id"], {"pvp_losses": loser.get("pvp_losses", 0) + 1})
+    
+    return "\n".join(log), winner, loser
+
 def button_handler(update, context):
     query = update.callback_query
     query.answer()
     user = query.from_user
     data = query.data
     
-    player, inventory = get_player(user.id)
+    player, inventory, loot_items = get_player(user.id)
     
     if data == "show_character_list":
         show_character_list(update, context, 0)
@@ -234,7 +271,7 @@ def button_handler(update, context):
             "gold": 200
         })
         
-        player, _ = get_player(user.id)
+        player, _, _ = get_player(user.id)
         show_main_menu(update, context, player)
         return
     
@@ -245,15 +282,131 @@ def button_handler(update, context):
     
     if data == "profile":
         show_main_menu(update, context, player)
+        return
     
-    elif data == "inv":
-        potions = inventory.get("health_potion", 0)
-        text = f"🎒 ИНВЕНТАРЬ\n\n💊 Зелья здоровья: {potions} шт.\n🏥 Лечат 30 HP"
+    if data == "leaderboard":
+        players = get_leaderboard()
+        text = "🏆 ТАБЛИЦА РЕЙТИНГА ПО УРОВНЯМ 🏆\n\n"
+        for i, p in enumerate(players, 1):
+            wins = p.get("pvp_wins", 0)
+            text += f"{i}. {p['character_name']} (ур. {p['level']}) - Побед в PvP: {wins}\n"
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="profile")]]
         query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
         query.message.delete()
+        return
     
-    elif data == "potion":
+    if data == "pvp":
+        # Поиск случайного противника онлайн
+        all_players = get_leaderboard(100)
+        opponents = [p for p in all_players if p['user_id'] != user.id]
+        if not opponents:
+            query.message.reply_text("❌ Нет других игроков для PvP!")
+            query.message.delete()
+            return
+        
+        # Выбираем случайного противника
+        import random
+        opponent_data = random.choice(opponents)
+        opponent, _, _ = get_player(opponent_data['user_id'])
+        
+        if not opponent:
+            query.message.reply_text("❌ Ошибка: противник не найден!")
+            query.message.delete()
+            return
+        
+        # Начинаем бой
+        log, winner, loser = pvp_fight(player, opponent)
+        query.message.reply_text(log)
+        query.message.delete()
+        show_main_menu(update, context, player)
+        return
+    
+    if data == "shop":
+        text = ("🛒 МАГАЗИН\n\n"
+                "💊 Зелье здоровья - 50💰 (восстанавливает 30 HP)\n"
+                "📜 Свиток опыта - 100💰 (+50 XP)")
+        keyboard = [
+            [InlineKeyboardButton("💊 Купить зелье (50💰)", callback_data="buy_potion")],
+            [InlineKeyboardButton("📜 Купить свиток (100💰)", callback_data="buy_xp_scroll")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="profile")],
+        ]
+        query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        query.message.delete()
+        return
+    
+    if data == "buy_potion":
+        if player["gold"] >= 50:
+            update_player(user.id, {"gold": player["gold"] - 50})
+            update_inventory(user.id, "health_potion", 1)
+            query.message.reply_text("✅ Вы купили зелье здоровья!")
+            query.message.delete()
+            player, _, _ = get_player(user.id)
+            show_main_menu(update, context, player)
+        else:
+            query.message.reply_text("❌ Не хватает золота!")
+            query.message.delete()
+        return
+    
+    if data == "buy_xp_scroll":
+        if player["gold"] >= 100:
+            update_player(user.id, {"gold": player["gold"] - 100, "xp": player["xp"] + 50})
+            query.message.reply_text("✅ Вы использовали свиток! +50 XP")
+            query.message.delete()
+            player, _, _ = get_player(user.id)
+            show_main_menu(update, context, player)
+        else:
+            query.message.reply_text("❌ Не хватает золота!")
+            query.message.delete()
+        return
+    
+    if data == "sell_loot":
+        if not loot_items:
+            query.message.reply_text("🎒 У вас нет лута для продажи!")
+            query.message.delete()
+            return
+        
+        text = "💰 ПРОДАЖА ЛУТА 💰\n\n"
+        keyboard = []
+        for item_name, item_value in loot_items.items():
+            text += f"• {item_name} - {item_value}💰\n"
+            keyboard.append([InlineKeyboardButton(f"Продать {item_name} ({item_value}💰)", callback_data=f"sell_{item_name}")])
+        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="profile")])
+        
+        query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        query.message.delete()
+        return
+    
+    if data.startswith("sell_"):
+        item_name = data[5:]
+        if item_name in loot_items:
+            value = loot_items[item_name]
+            update_player(user.id, {"gold": player["gold"] + value})
+            remove_loot_item(user.id, item_name)
+            query.message.reply_text(f"✅ Вы продали {item_name} за {value}💰!")
+            query.message.delete()
+            player, _, loot_items = get_player(user.id)
+            show_main_menu(update, context, player)
+        else:
+            query.message.reply_text("❌ Предмет не найден!")
+            query.message.delete()
+        return
+    
+    if data == "inv":
+        potions = inventory.get("health_potion", 0)
+        text = f"🎒 ИНВЕНТАРЬ\n\n💊 Зелья здоровья: {potions} шт.\n🏥 Лечат 30 HP\n\n"
+        if loot_items:
+            text += "🎁 ЛУТ (можно продать в магазине):\n"
+            for item_name, item_value in loot_items.items():
+                text += f"• {item_name} - {item_value}💰\n"
+        else:
+            text += "🎁 Лута нет. Сражайся с монстрами, чтобы получить лут!"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="profile")]]
+        query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        query.message.delete()
+        return
+    
+    if data == "potion":
         if inventory.get("health_potion", 0) > 0:
             heal = 30
             new_hp = min(player["max_hp"], player["hp"] + heal)
@@ -261,13 +414,14 @@ def button_handler(update, context):
             update_inventory(user.id, "health_potion", -1)
             query.message.reply_text(f"💊 Вылечено +{heal} HP! ({new_hp}/{player['max_hp']})")
             query.message.delete()
-            player, _ = get_player(user.id)
+            player, _, _ = get_player(user.id)
             show_main_menu(update, context, player)
         else:
             query.message.reply_text("❌ Нет зелий здоровья!")
             query.message.delete()
+        return
     
-    elif data == "daily":
+    if data == "daily":
         today = date.today().isoformat()
         if player.get("last_daily") == today:
             query.message.reply_text("🎁 Ты уже получал ежедневную награду сегодня!")
@@ -276,19 +430,25 @@ def button_handler(update, context):
             update_player(user.id, {"gold": player["gold"] + 100, "xp": player["xp"] + 50, "last_daily": today})
             query.message.reply_text("🎁 +100💰 золота и +50 XP!")
             query.message.delete()
-            player, _ = get_player(user.id)
+            player, _, _ = get_player(user.id)
             show_main_menu(update, context, player)
+        return
     
-    elif data == "fight":
+    if data == "fight":
         is_boss = (player["level"] % 5 == 0 and player["level"] in [5, 10])
-        log, updated_player, _ = fight(player, inventory, is_boss)
+        log, updated_player, inventory, loot_items, loot_dropped, loot_value = fight(player, inventory, loot_items, is_boss)
+        
+        if loot_dropped:
+            add_loot_item(user.id, loot_dropped, loot_value)
+        
         update_player(user.id, updated_player)
         query.message.reply_text(log)
         query.message.delete()
-        player, _ = get_player(user.id)
+        player, _, _ = get_player(user.id)
         show_main_menu(update, context, player)
+        return
     
-    elif data == "upgrade":
+    if data == "upgrade":
         text = (f"📈 ПРОКАЧКА ХАРАКТЕРИСТИК\n\n"
                 f"🌟 XP: {player['xp']}\n"
                 f"💰 Стоимость +1 стата: {EXP_COST_PER_STAT} XP\n\n"
@@ -304,34 +464,37 @@ def button_handler(update, context):
         ]
         query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
         query.message.delete()
+        return
     
-    elif data == "upgrade_strength":
+    if data == "upgrade_strength":
         if player["xp"] >= EXP_COST_PER_STAT:
             new_xp = player["xp"] - EXP_COST_PER_STAT
             new_strength = player["strength"] + 1
             update_player(user.id, {"xp": new_xp, "strength": new_strength})
             query.message.reply_text(f"💪 Сила увеличена до {new_strength}!")
             query.message.delete()
-            player, _ = get_player(user.id)
+            player, _, _ = get_player(user.id)
             show_main_menu(update, context, player)
         else:
             query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
             query.message.delete()
+        return
     
-    elif data == "upgrade_magic":
+    if data == "upgrade_magic":
         if player["xp"] >= EXP_COST_PER_STAT:
             new_xp = player["xp"] - EXP_COST_PER_STAT
             new_magic = player["magic"] + 1
             update_player(user.id, {"xp": new_xp, "magic": new_magic})
             query.message.reply_text(f"✨ Магия увеличена до {new_magic}!")
             query.message.delete()
-            player, _ = get_player(user.id)
+            player, _, _ = get_player(user.id)
             show_main_menu(update, context, player)
         else:
             query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
             query.message.delete()
+        return
     
-    elif data == "upgrade_hp":
+    if data == "upgrade_hp":
         if player["xp"] >= EXP_COST_PER_STAT:
             new_xp = player["xp"] - EXP_COST_PER_STAT
             new_max_hp = player["max_hp"] + 10
@@ -339,11 +502,12 @@ def button_handler(update, context):
             update_player(user.id, {"xp": new_xp, "max_hp": new_max_hp, "hp": new_hp})
             query.message.reply_text(f"❤️ HP увеличено до {new_max_hp}!")
             query.message.delete()
-            player, _ = get_player(user.id)
+            player, _, _ = get_player(user.id)
             show_main_menu(update, context, player)
         else:
             query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
             query.message.delete()
+        return
 
 def main():
     from telegram.ext import Updater
