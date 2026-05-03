@@ -691,4 +691,33 @@ def button_handler(update, context):
             query.message.reply_text(f"✨ Магия увеличена до {new_magic}!", reply_markup=get_back_keyboard())
             query.message.delete()
         else:
-            query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT
+            query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP", reply_markup=get_back_keyboard())
+            query.message.delete()
+        return
+    
+    if data == "upgrade_hp":
+        if player["xp"] >= EXP_COST_PER_STAT:
+            new_xp = player["xp"] - EXP_COST_PER_STAT
+            new_max_hp = player["max_hp"] + 10
+            new_hp = player["hp"] + 10
+            update_player(user.id, {"xp": new_xp, "max_hp": new_max_hp, "hp": new_hp})
+            query.message.reply_text(f"❤️ HP увеличено до {new_max_hp}!", reply_markup=get_back_keyboard())
+            query.message.delete()
+        else:
+            query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP", reply_markup=get_back_keyboard())
+            query.message.delete()
+        return
+
+def main():
+    updater = Updater(TOKEN)
+    dp = updater.dispatcher
+    
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CallbackQueryHandler(button_handler))
+    
+    updater.start_polling()
+    print("✅ Бот запущен!")
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
