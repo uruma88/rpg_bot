@@ -660,20 +660,45 @@ def button_handler(update, context):
         query.message.delete()
         return
     
-    if data == "upgrade_armor":
+        if data == "upgrade_armor":
         current_armor = player.get("armor", "Нет")
         if current_armor == "Нет":
-            query.message.reply_text("❌ У вас нет брони для улучшения! Купите броню в магазине.", reply_markup=get_back_keyboard())
+            query.message.reply_text("❌ У вас нет брони для улучшения! Купите и наденьте броню в магазине.", reply_markup=get_back_keyboard())
             query.message.delete()
             return
         
         player_class = get_player_class(player['character_name'])
-        upgrade_cost, upgrade_bonus = get_armor_upgrade(current_armor, player_class)
+        
+        upgrade_cost = None
+        upgrade_bonus = 0
+        for armor in ARMOR[player_class]:
+            if armor['name'] == current_armor:
+                upgrade_cost = armor.get('upgrade_cost')
+                upgrade_bonus = armor.get('upgrade_bonus', 0)
+                break
         
         if not upgrade_cost:
             query.message.reply_text("❌ Эту броню нельзя улучшить!", reply_markup=get_back_keyboard())
             query.message.delete()
             return
+        
+        text = f"🛡️ УЛУЧШЕНИЕ БРОНИ 🛡️\n\n{current_armor}\n\n"
+        text += f"Для улучшения нужно:\n"
+        text += f"💰 Золото: 200\n"
+        for mat, qty in upgrade_cost.items():
+            text += f"🔧 {mat}: {qty} шт.\n"
+        text += f"\n✨ Эффект: +{upgrade_bonus} к HP"
+        
+        keyboard = [
+            [InlineKeyboardButton("✅ Улучшить", callback_data="do_upgrade_armor")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="blacksmith")],
+        ]
+        try:
+            query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+            query.message.delete()
+        except:
+            pass
+        return
         
         text = f"🛡️ УЛУЧШЕНИЕ БРОНИ 🛡️\n\n{current_armor}\n\n"
         text += f"Для улучшения нужно:\n"
