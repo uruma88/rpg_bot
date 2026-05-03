@@ -26,6 +26,7 @@ def init_db():
                 magic INTEGER DEFAULT 15,
                 gold INTEGER DEFAULT 200,
                 last_daily TEXT,
+                last_fight TEXT,
                 weapon TEXT DEFAULT 'Нет',
                 weapon_level INTEGER DEFAULT 1,
                 armor TEXT DEFAULT 'Нет',
@@ -256,3 +257,28 @@ def get_leaderboard_by_pvp(limit=10):
             LIMIT ?
         """, (limit,)).fetchall()
         return [dict(p) for p in players]
+
+def can_fight(user_id):
+    """Проверяет, может ли игрок сражаться (не на CD)"""
+    with get_db() as conn:
+        player = conn.execute("SELECT last_fight FROM players WHERE user_id = ?", (user_id,)).fetchone()
+        if not player or not player["last_fight"]:
+            return True, 0
+        
+        from datetime import datetime
+        last_fight = datetime.fromisoformat(player["last_fight"])
+        now = datetime.now()
+        seconds_passed = (now - last_fight).total_seconds()
+        cooldown = 30  # 30 секунд КД
+        
+        if seconds_passed >= cooldown:
+            return True, 0
+        else:
+            remaining = int(cooldown - seconds_passed)
+            return False, remaining
+
+def set_last_fight(user_id):
+    """Обновляет время последнего боя"""
+    from datetime import datetime
+    with get_db() as conn:
+        conn.execute("UPDATE players SET last_fight = ? WHERE user_id = ?", (datetime.now().isoformat(), user_id))
