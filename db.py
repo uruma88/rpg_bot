@@ -68,7 +68,7 @@ def get_player(user_id):
         inv = conn.execute("SELECT item_type, quantity FROM inventory WHERE user_id = ?", (user_id,)).fetchall()
         inventory = {row["item_type"]: row["quantity"] for row in inv}
         loot = conn.execute("SELECT item_name, item_value FROM loot_items WHERE user_id = ?", (user_id,)).fetchall()
-        loot_items = {row["item_name"]: row["value"] for row in loot}
+        loot_items = {row["item_name"]: row["item_value"] for row in loot}
         mats = conn.execute("SELECT material_name, quantity FROM materials WHERE user_id = ?", (user_id,)).fetchall()
         materials = {row["material_name"]: row["quantity"] for row in mats}
         return dict(player), inventory, loot_items, materials
@@ -98,7 +98,7 @@ def update_inventory(user_id, item_type, delta):
 
 def add_loot_item(user_id, item_name, item_value):
     with get_db() as conn:
-        conn.execute("INSERT OR REPLACE INTO loot_items (user_id, item_name, value) VALUES (?, ?, ?)", 
+        conn.execute("INSERT OR REPLACE INTO loot_items (user_id, item_name, item_value) VALUES (?, ?, ?)", 
                      (user_id, item_name, item_value))
 
 def remove_loot_item(user_id, item_name):
@@ -131,24 +131,22 @@ def set_character(user_id, character_name, photo_path):
         conn.execute("UPDATE players SET character_name = ?, photo_path = ? WHERE user_id = ?", (character_name, photo_path, user_id))
         conn.execute("INSERT OR IGNORE INTO inventory (user_id, item_type, quantity) VALUES (?, ?, ?)", (user_id, "health_potion", 3))
 
-def calculate_power_score(player, weapon_base_bonus=0, armor_base_bonus=0):
-    """Расчёт общей силы персонажа"""
+def calculate_power_score(player, weapon_bonus=0, armor_bonus=0):
     score = 0
-    score += player["level"] * 10           # 10 поинтов за уровень
-    score += player["strength"] * 2         # 2 поинта за силу
-    score += player["magic"] * 2            # 2 поинта за магию
-    score += player["max_hp"] // 10         # 1 поинт за 10 HP
-    score += player.get("weapon_level", 1) * 15   # за улучшение оружия
-    score += player.get("armor_level", 1) * 10    # за улучшение брони
-    score += weapon_base_bonus              # бонус от оружия
-    score += armor_base_bonus               # бонус от брони
+    score += player["level"] * 10
+    score += player["strength"] * 2
+    score += player["magic"] * 2
+    score += player["max_hp"] // 10
+    score += player.get("weapon_level", 1) * 15
+    score += player.get("armor_level", 1) * 10
+    score += weapon_bonus
+    score += armor_bonus
     return score
 
-def update_power_score(user_id):
-    """Обновляет power_score в базе данных"""
+def update_power_score(user_id, weapon_bonus=0, armor_bonus=0):
     player, _, _, _ = get_player(user_id)
     if player:
-        score = calculate_power_score(player)
+        score = calculate_power_score(player, weapon_bonus, armor_bonus)
         update_player(user_id, {"power_score": score})
         return score
     return 0
