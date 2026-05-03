@@ -283,3 +283,18 @@ def set_last_fight(user_id):
     """Обновляет время последнего боя"""
     with get_db() as conn:
         conn.execute("UPDATE players SET last_fight = ? WHERE user_id = ?", (datetime.now().isoformat(), user_id))
+
+# В таблице players добавить колонку skill_points
+conn.execute("""
+    CREATE TABLE IF NOT EXISTS players (
+        ... существующие поля ...
+        skill_points INTEGER DEFAULT 0,
+        ...
+    )
+""")
+
+# Или если таблица уже существует, добавить колонку:
+try:
+    conn.execute("ALTER TABLE players ADD COLUMN skill_points INTEGER DEFAULT 0")
+except:
+    pass
