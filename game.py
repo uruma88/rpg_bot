@@ -1,43 +1,32 @@
 import random
 
 MONSTERS = [
-    # Уровни 1-5
     {"name": "🐀 Крыса", "hp": 25, "atk": 4, "xp": 40, "gold": 8, "min_level": 1, "max_level": 5, 
      "loot": ["Крысиный хвост", "Гнилой зуб"], "materials": ["Серая шерсть", "Мелкий осколок"]},
     {"name": "🍄 Гриб-мутант", "hp": 30, "atk": 5, "xp": 50, "gold": 10, "min_level": 1, "max_level": 5, 
      "loot": ["Споры", "Ядовитый гриб"], "materials": ["Светящийся спермаций", "Грибная слизь"]},
     {"name": "👹 Гоблин", "hp": 35, "atk": 6, "xp": 60, "gold": 12, "min_level": 1, "max_level": 5, 
      "loot": ["Гоблинская сабля", "Рваная накидка"], "materials": ["Гоблинская серьга", "Медная пряжка"]},
-    
-    # Уровни 5-10
     {"name": "🐺 Волк", "hp": 55, "atk": 8, "xp": 80, "gold": 18, "min_level": 5, "max_level": 10, 
      "loot": ["Волчья шкура", "Острый клык"], "materials": ["Волчья шерсть", "Кровь хищника"]},
     {"name": "🧌 Орк", "hp": 70, "atk": 10, "xp": 100, "gold": 25, "min_level": 5, "max_level": 10, 
      "loot": ["Орочья дубина", "Потёртый шлем"], "materials": ["Орочья кость", "Грубая сталь"]},
     {"name": "🕷️ Гигантский паук", "hp": 60, "atk": 12, "xp": 90, "gold": 20, "min_level": 5, "max_level": 10, 
      "loot": ["Паутина", "Ядовитые клыки"], "materials": ["Паутинная нить", "Ядовитая железа"]},
-    
-    # Уровни 10-15
     {"name": "🧟 Скелет", "hp": 90, "atk": 13, "xp": 130, "gold": 30, "min_level": 10, "max_level": 15, 
      "loot": ["Кость", "Ржавый меч"], "materials": ["Костяная пыль", "Серебряный осколок"]},
     {"name": "👻 Призрак", "hp": 80, "atk": 15, "xp": 140, "gold": 35, "min_level": 10, "max_level": 15, 
      "loot": ["Призрачная пыль", "Эфирный камень"], "materials": ["Туманный кристалл", "Духовный эссенс"]},
     {"name": "🧙 Некромант", "hp": 100, "atk": 14, "xp": 150, "gold": 40, "min_level": 10, "max_level": 15, 
      "loot": ["Тёмный гримуар", "Череп"], "materials": ["Тёмная руна", "Магический порошок"]},
-    
-    # Уровни 15-20
     {"name": "🐉 Молодой дракон", "hp": 140, "atk": 18, "xp": 200, "gold": 60, "min_level": 15, "max_level": 20, 
      "loot": ["Драконья чешуя", "Драконья кровь"], "materials": ["Драконий коготь", "Пламенная искра"]},
     {"name": "🗿 Голем", "hp": 180, "atk": 16, "xp": 220, "gold": 70, "min_level": 15, "max_level": 20, 
      "loot": ["Каменное сердце", "Магический кристалл"], "materials": ["Каменная крошка", "Рунический камень"]},
-    
-    # Уровни 20-25
     {"name": "🔥 Огненный элементаль", "hp": 200, "atk": 22, "xp": 280, "gold": 90, "min_level": 20, "max_level": 25, 
      "loot": ["Огненный камень", "Пепел элементаля"], "materials": ["Искра огня", "Пепел возрождения"]},
     {"name": "❄️ Ледяной великан", "hp": 250, "atk": 20, "xp": 300, "gold": 100, "min_level": 20, "max_level": 25, 
      "loot": ["Ледяное сердце", "Северный камень"], "materials": ["Вечный лёд", "Морозная пыль"]},
-    
-    # Уровни 25-30
     {"name": "👑 Король личей", "hp": 300, "atk": 25, "xp": 400, "gold": 150, "min_level": 25, "max_level": 30, 
      "loot": ["Филактерия", "Посох лича"], "materials": ["Кость древних", "Тьма сгусток"]},
     {"name": "🐲 Древний дракон", "hp": 350, "atk": 28, "xp": 450, "gold": 180, "min_level": 25, "max_level": 30, 
@@ -196,24 +185,18 @@ def fight(player, inventory, loot_items, materials, is_boss=False):
             gold_gain = enemy["gold"]
             log.append(f"✅ Победа! +{xp_gain} XP, +{gold_gain}💰")
             
-            # Накопленный опыт (старый)
             current_xp = player["xp"]
-            # Новый опыт для повышения уровня
             new_xp = current_xp + xp_gain
             old_level = player["level"]
             new_level = old_level
-            
-            # Очки навыков (skill points) - отдельно от XP
             skill_points = player.get("skill_points", 0)
-            total_xp_gained = 0
             
             while new_xp >= get_next_xp(new_level):
                 new_xp -= get_next_xp(new_level)
                 new_level += 1
-                skill_points += 3  # Даём 3 очка навыков за уровень
+                skill_points += 3
                 log.append(f"🎉 ПОВЫШЕНИЕ УРОВНЯ ДО {new_level}! Получено 3 очка навыков!")
             
-            # Обновляем статы при повышении уровня
             if new_level > old_level:
                 player["max_hp"] += 15
                 player["hp"] = player["max_hp"]
@@ -222,7 +205,16 @@ def fight(player, inventory, loot_items, materials, is_boss=False):
                 player["strength"] += 3
                 player["magic"] += 3
             
-            # Сохраняем: XP (для уровня) и skill_points (для прокачки)
+            if random.random() < 0.45 and enemy.get("loot"):
+                loot_dropped = random.choice(enemy["loot"])
+                loot_value = LOOT_VALUES.get(loot_dropped, 50)
+                log.append(f"🎁 Вам выпало: {loot_dropped} (можно продать за {loot_value}💰)")
+            
+            if random.random() < 0.6 and enemy.get("materials"):
+                material_dropped = random.choice(enemy["materials"])
+                material_value = LOOT_VALUES.get(material_dropped, 20)
+                log.append(f"🔧 Вам выпал материал: {material_dropped}")
+            
             player.update({
                 "xp": new_xp,
                 "level": new_level,
@@ -235,15 +227,6 @@ def fight(player, inventory, loot_items, materials, is_boss=False):
                 "gold": player["gold"] + gold_gain
             })
             return "\n".join(log), player, inventory, loot_items, materials, loot_dropped, loot_value, material_dropped, material_value
-        
-        enemy_damage = random.randint(1, enemy["atk"])
-        player_hp -= enemy_damage
-        log.append(f"💥 {enemy['name']} атакует и наносит {enemy_damage} урона. У вас {max(0, player_hp)} HP.")
-    
-    log.append("💀 Вы проиграли. Вас воскресили с 50% HP и MP.")
-    player["hp"] = player["max_hp"] // 2
-    player["mana"] = player["max_mana"] // 2
-    return "\n".join(log), player, inventory, loot_items, materials, None, 0, None, 0
         
         enemy_damage = random.randint(1, enemy["atk"])
         player_hp -= enemy_damage
