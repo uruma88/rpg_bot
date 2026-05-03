@@ -83,6 +83,12 @@ def get_class_keyboard(character_name):
     keyboard.append([InlineKeyboardButton("🔙 Назад к списку", callback_data="back_to_list")])
     return InlineKeyboardMarkup(keyboard)
 
+def send_message(chat_id, text, reply_markup=None, photo_path=None):
+    """Вспомогательная функция для отправки сообщений"""
+    # Здесь мы не можем напрямую отправить, так как нет update
+    # Будем использовать в функциях с update
+    pass
+
 def start(update, context):
     user = update.effective_user
     player, _ = get_player(user.id)
@@ -103,7 +109,9 @@ def start(update, context):
 
 def show_character_list(update, context, page=0):
     text = "📋 ВЫБЕРИ ПЕРСОНАЖА:\n\nНажми на имя, чтобы увидеть статы и фото:"
-    update.callback_query.edit_message_text(text, reply_markup=get_character_list_keyboard(page))
+    # Отправляем новое сообщение вместо редактирования
+    update.callback_query.message.reply_text(text, reply_markup=get_character_list_keyboard(page))
+    update.callback_query.message.delete()
 
 def show_character_card(update, context, character_name):
     friend = None
@@ -132,7 +140,8 @@ def show_character_card(update, context, character_name):
             )
         update.callback_query.message.delete()
     else:
-        update.callback_query.edit_message_text(text, reply_markup=get_class_keyboard(character_name))
+        update.callback_query.message.reply_text(text, reply_markup=get_class_keyboard(character_name))
+        update.callback_query.message.delete()
 
 def show_main_menu(update, context, player):
     text = (f"👤 {player['character_name']} (ур. {player['level']})\n"
@@ -143,18 +152,22 @@ def show_main_menu(update, context, player):
             f"💰 Золото: {player['gold']}\n"
             f"🔧 {player.get('weapon', 'Нет оружия')} | {player.get('armor', 'Нет брони')}")
     
-    # Отправляем сообщение с фото, если есть
     photo_path = player.get("photo_path")
+    
+    # Удаляем старое сообщение, если оно от callback
+    if update.callback_query:
+        update.callback_query.message.delete()
+    
+    # Отправляем новое сообщение с фото или без
     if photo_path and os.path.exists(photo_path):
         with open(photo_path, 'rb') as photo:
             if update.callback_query:
                 update.callback_query.message.reply_photo(photo, caption=text, reply_markup=get_main_keyboard())
-                update.callback_query.message.delete()
             else:
                 update.message.reply_photo(photo, caption=text, reply_markup=get_main_keyboard())
     else:
         if update.callback_query:
-            update.callback_query.edit_message_text(text, reply_markup=get_main_keyboard())
+            update.callback_query.message.reply_text(text, reply_markup=get_main_keyboard())
         else:
             update.message.reply_text(text, reply_markup=get_main_keyboard())
 
@@ -200,7 +213,8 @@ def button_handler(update, context):
                 break
         
         if not char_data:
-            query.edit_message_text("Ошибка: персонаж не найден")
+            query.message.reply_text("Ошибка: персонаж не найден")
+            query.message.delete()
             return
         
         final_strength = char_data["strength"] + class_strength
@@ -226,7 +240,8 @@ def button_handler(update, context):
         return
     
     if not player or not player.get("character_name"):
-        query.edit_message_text("Сначала выбери персонажа: /start")
+        query.message.reply_text("Сначала выбери персонажа: /start")
+        query.message.delete()
         return
     
     if data == "profile":
@@ -236,7 +251,8 @@ def button_handler(update, context):
         potions = inventory.get("health_potion", 0)
         text = f"🎒 ИНВЕНТАРЬ\n\n💊 Зелья здоровья: {potions} шт.\n🏥 Лечат 30 HP"
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="profile")]]
-        query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        query.message.delete()
     
     elif data == "potion":
         if inventory.get("health_potion", 0) > 0:
@@ -244,19 +260,23 @@ def button_handler(update, context):
             new_hp = min(player["max_hp"], player["hp"] + heal)
             update_player(user.id, {"hp": new_hp})
             update_inventory(user.id, "health_potion", -1)
-            query.edit_message_text(f"💊 Вылечено +{heal} HP! ({new_hp}/{player['max_hp']})")
+            query.message.reply_text(f"💊 Вылечено +{heal} HP! ({new_hp}/{player['max_hp']})")
+            query.message.delete()
             player, _ = get_player(user.id)
             show_main_menu(update, context, player)
         else:
-            query.edit_message_text("❌ Нет зелий здоровья!")
+            query.message.reply_text("❌ Нет зелий здоровья!")
+            query.message.delete()
     
     elif data == "daily":
         today = date.today().isoformat()
         if player.get("last_daily") == today:
-            query.edit_message_text("🎁 Ты уже получал ежедневную награду сегодня!")
+            query.message.reply_text("🎁 Ты уже получал ежедневную награду сегодня!")
+            query.message.delete()
         else:
             update_player(user.id, {"gold": player["gold"] + 100, "xp": player["xp"] + 50, "last_daily": today})
-            query.edit_message_text("🎁 +100💰 золота и +50 XP!")
+            query.message.reply_text("🎁 +100💰 золота и +50 XP!")
+            query.message.delete()
             player, _ = get_player(user.id)
             show_main_menu(update, context, player)
     
@@ -264,7 +284,8 @@ def button_handler(update, context):
         is_boss = (player["level"] % 5 == 0 and player["level"] in [5, 10])
         log, updated_player, _ = fight(player, inventory, is_boss)
         update_player(user.id, updated_player)
-        query.edit_message_text(log)
+        query.message.reply_text(log)
+        query.message.delete()
         player, _ = get_player(user.id)
         show_main_menu(update, context, player)
     
@@ -282,29 +303,34 @@ def button_handler(update, context):
             [InlineKeyboardButton("❤️ +10 HP", callback_data="upgrade_hp")],
             [InlineKeyboardButton("🔙 Назад", callback_data="profile")],
         ]
-        query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        query.message.delete()
     
     elif data == "upgrade_strength":
         if player["xp"] >= EXP_COST_PER_STAT:
             new_xp = player["xp"] - EXP_COST_PER_STAT
             new_strength = player["strength"] + 1
             update_player(user.id, {"xp": new_xp, "strength": new_strength})
-            query.edit_message_text(f"💪 Сила увеличена до {new_strength}!")
+            query.message.reply_text(f"💪 Сила увеличена до {new_strength}!")
+            query.message.delete()
             player, _ = get_player(user.id)
             show_main_menu(update, context, player)
         else:
-            query.edit_message_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
+            query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
+            query.message.delete()
     
     elif data == "upgrade_magic":
         if player["xp"] >= EXP_COST_PER_STAT:
             new_xp = player["xp"] - EXP_COST_PER_STAT
             new_magic = player["magic"] + 1
             update_player(user.id, {"xp": new_xp, "magic": new_magic})
-            query.edit_message_text(f"✨ Магия увеличена до {new_magic}!")
+            query.message.reply_text(f"✨ Магия увеличена до {new_magic}!")
+            query.message.delete()
             player, _ = get_player(user.id)
             show_main_menu(update, context, player)
         else:
-            query.edit_message_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
+            query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
+            query.message.delete()
     
     elif data == "upgrade_hp":
         if player["xp"] >= EXP_COST_PER_STAT:
@@ -312,11 +338,13 @@ def button_handler(update, context):
             new_max_hp = player["max_hp"] + 10
             new_hp = player["hp"] + 10
             update_player(user.id, {"xp": new_xp, "max_hp": new_max_hp, "hp": new_hp})
-            query.edit_message_text(f"❤️ HP увеличено до {new_max_hp}!")
+            query.message.reply_text(f"❤️ HP увеличено до {new_max_hp}!")
+            query.message.delete()
             player, _ = get_player(user.id)
             show_main_menu(update, context, player)
         else:
-            query.edit_message_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
+            query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP")
+            query.message.delete()
 
 def main():
     from telegram.ext import Updater
