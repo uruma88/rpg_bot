@@ -59,19 +59,36 @@ def init_db():
                 PRIMARY KEY(user_id, material_name)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_items (
+                user_id INTEGER,
+                item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_name TEXT,
+                item_type TEXT,
+                item_class TEXT,
+                bonus_strength INTEGER DEFAULT 0,
+                bonus_magic INTEGER DEFAULT 0,
+                bonus_hp INTEGER DEFAULT 0,
+                level INTEGER DEFAULT 1,
+                equipped INTEGER DEFAULT 0,
+                FOREIGN KEY(user_id) REFERENCES players(user_id)
+            )
+        """)
 
 def get_player(user_id):
     with get_db() as conn:
         player = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
         if not player:
-            return None, {}, {}, {}
+            return None, {}, {}, {}, []
         inv = conn.execute("SELECT item_type, quantity FROM inventory WHERE user_id = ?", (user_id,)).fetchall()
         inventory = {row["item_type"]: row["quantity"] for row in inv}
         loot = conn.execute("SELECT item_name, item_value FROM loot_items WHERE user_id = ?", (user_id,)).fetchall()
         loot_items = {row["item_name"]: row["item_value"] for row in loot}
         mats = conn.execute("SELECT material_name, quantity FROM materials WHERE user_id = ?", (user_id,)).fetchall()
         materials = {row["material_name"]: row["quantity"] for row in mats}
-        return dict(player), inventory, loot_items, materials
+        items = conn.execute("SELECT * FROM user_items WHERE user_id = ? ORDER BY item_type, item_name", (user_id,)).fetchall()
+        user_items = [dict(row) for row in items]
+        return dict(player), inventory, loot_items, materials, user_items
 
 def create_player(user_id, name):
     with get_db() as conn:
@@ -131,22 +148,78 @@ def set_character(user_id, character_name, photo_path):
         conn.execute("UPDATE players SET character_name = ?, photo_path = ? WHERE user_id = ?", (character_name, photo_path, user_id))
         conn.execute("INSERT OR IGNORE INTO inventory (user_id, item_type, quantity) VALUES (?, ?, ?)", (user_id, "health_potion", 3))
 
-def calculate_power_score(player, weapon_bonus=0, armor_bonus=0):
-    score = 0
-    score += player["level"] * 10
-    score += player["strength"] * 2
-    score += player["magic"] * 2
-    score += player["max_hp"] // 10
-    score += player.get("weapon_level", 1) * 15
-    score += player.get("armor_level", 1) * 10
-    score += weapon_bonus
-    score += armor_bonus
-    return score
+def add_item_to_inventory(user_id, item_name, item_type, item_class, bonus_strength, bonus_magic, bonus_hp):
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO user_items (user_id, item_name, item_type, item_class, bonus_strength, bonus_magic, bonus_hp, equipped)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+        """, (user_id, item_name, item_type, item_class, bonus_strength, bonus_magic, bonus_hp))
 
-def update_power_score(user_id, weapon_bonus=0, armor_bonus=0):
-    player, _, _, _ = get_player(user_id)
+def get_user_items(user_id, item_type=None):
+    with get_db() as conn:
+        if item_type:
+            items = conn.execute("SELECT * FROM user_items WHERE user_id = ? AND item_type = ?", (user_id, item_type)).fetchall()
+        else:
+            items = conn.execute("SELECT * FROM user_items WHERE user_id = ?", (user_id,)).fetchall()
+        return [dict(item) for item in items]
+
+def equip_item(user_id, item_id):
+    with get_db() as conn:
+        item = conn.execute("SELECT * FROM user_items WHERE id = ? AND user_id = ?", (item_id, user_id)).fetchone()
+        if not item:
+            return False, "Предмет не найден"
+        
+        item_type = item["item_type"]
+        
+        # Снимаем текущий предмет того же типа
+        conn.execute("UPDATE user_items SET equipped = 0 WHERE user_id = ? AND item_type = ? AND equipped = 1", (user_id, item_type))
+        
+        # Надеваем новый
+        conn.execute("UPDATE user_items SET equipped = 1 WHERE id = ?", (item_id,))
+        
+        # Обновляем статы игрока
+        player = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
+        
+        if item_type == "weapon":
+            new_strength = player["strength"] + item["bonus_strength"]
+            new_magic = player["magic"] + item["bonus_magic"]
+            conn.execute("UPDATE players SET strength = ?, magic = ?, weapon = ? WHERE user_id = ?", 
+                        (new_strength, new_magic, item["item_name"], user_id))
+        elif item_type == "armor":
+            new_max_hp = player["max_hp"] + item["bonus_hp"]
+            new_hp = player["hp"] + item["bonus_hp"]
+            conn.execute("UPDATE players SET max_hp = ?, hp = ?, armor = ? WHERE user_id = ?", 
+                        (new_max_hp, new_hp, item["item_name"], user_id))
+        
+        return True, f"✅ {item['item_name']} надет!"
+
+def unequip_item(user_id, item_type):
+    with get_db() as conn:
+        item = conn.execute("SELECT * FROM user_items WHERE user_id = ? AND item_type = ? AND equipped = 1", (user_id, item_type)).fetchone()
+        if not item:
+            return False, f"Нет надетого предмета типа {item_type}"
+        
+        conn.execute("UPDATE user_items SET equipped = 0 WHERE id = ?", (item["id"],))
+        
+        player = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
+        
+        if item_type == "weapon":
+            new_strength = player["strength"] - item["bonus_strength"]
+            new_magic = player["magic"] - item["bonus_magic"]
+            conn.execute("UPDATE players SET strength = ?, magic = ?, weapon = 'Нет' WHERE user_id = ?", 
+                        (new_strength, new_magic, user_id))
+        elif item_type == "armor":
+            new_max_hp = player["max_hp"] - item["bonus_hp"]
+            new_hp = min(player["hp"], new_max_hp)
+            conn.execute("UPDATE players SET max_hp = ?, hp = ?, armor = 'Нет' WHERE user_id = ?", 
+                        (new_max_hp, new_hp, user_id))
+        
+        return True, f"✅ {item['item_name']} снят!"
+
+def update_power_score(user_id):
+    player, _, _, _, _ = get_player(user_id)
     if player:
-        score = calculate_power_score(player, weapon_bonus, armor_bonus)
+        score = player["level"] * 10 + player["strength"] * 2 + player["magic"] * 2 + player["max_hp"] // 10
         update_player(user_id, {"power_score": score})
         return score
     return 0
