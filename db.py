@@ -31,7 +31,8 @@ def init_db():
                 armor TEXT DEFAULT 'Нет',
                 armor_level INTEGER DEFAULT 1,
                 pvp_wins INTEGER DEFAULT 0,
-                pvp_losses INTEGER DEFAULT 0
+                pvp_losses INTEGER DEFAULT 0,
+                power_score INTEGER DEFAULT 0
             )
         """)
         conn.execute("""
@@ -67,14 +68,14 @@ def get_player(user_id):
         inv = conn.execute("SELECT item_type, quantity FROM inventory WHERE user_id = ?", (user_id,)).fetchall()
         inventory = {row["item_type"]: row["quantity"] for row in inv}
         loot = conn.execute("SELECT item_name, item_value FROM loot_items WHERE user_id = ?", (user_id,)).fetchall()
-        loot_items = {row["item_name"]: row["item_value"] for row in loot}
+        loot_items = {row["item_name"]: row["value"] for row in loot}
         mats = conn.execute("SELECT material_name, quantity FROM materials WHERE user_id = ?", (user_id,)).fetchall()
         materials = {row["material_name"]: row["quantity"] for row in mats}
         return dict(player), inventory, loot_items, materials
 
 def create_player(user_id, name):
     with get_db() as conn:
-        conn.execute("INSERT INTO players (user_id, name) VALUES (?, ?)", (user_id, name))
+        conn.execute("INSERT INTO players (user_id, name, power_score) VALUES (?, ?, 0)", (user_id, name))
 
 def update_player(user_id, data):
     with get_db() as conn:
@@ -97,7 +98,7 @@ def update_inventory(user_id, item_type, delta):
 
 def add_loot_item(user_id, item_name, item_value):
     with get_db() as conn:
-        conn.execute("INSERT OR REPLACE INTO loot_items (user_id, item_name, item_value) VALUES (?, ?, ?)", 
+        conn.execute("INSERT OR REPLACE INTO loot_items (user_id, item_name, value) VALUES (?, ?, ?)", 
                      (user_id, item_name, item_value))
 
 def remove_loot_item(user_id, item_name):
@@ -130,13 +131,57 @@ def set_character(user_id, character_name, photo_path):
         conn.execute("UPDATE players SET character_name = ?, photo_path = ? WHERE user_id = ?", (character_name, photo_path, user_id))
         conn.execute("INSERT OR IGNORE INTO inventory (user_id, item_type, quantity) VALUES (?, ?, ?)", (user_id, "health_potion", 3))
 
-def get_leaderboard(limit=10):
+def calculate_power_score(player, weapon_base_bonus=0, armor_base_bonus=0):
+    """Расчёт общей силы персонажа"""
+    score = 0
+    score += player["level"] * 10           # 10 поинтов за уровень
+    score += player["strength"] * 2         # 2 поинта за силу
+    score += player["magic"] * 2            # 2 поинта за магию
+    score += player["max_hp"] // 10         # 1 поинт за 10 HP
+    score += player.get("weapon_level", 1) * 15   # за улучшение оружия
+    score += player.get("armor_level", 1) * 10    # за улучшение брони
+    score += weapon_base_bonus              # бонус от оружия
+    score += armor_base_bonus               # бонус от брони
+    return score
+
+def update_power_score(user_id):
+    """Обновляет power_score в базе данных"""
+    player, _, _, _ = get_player(user_id)
+    if player:
+        score = calculate_power_score(player)
+        update_player(user_id, {"power_score": score})
+        return score
+    return 0
+
+def get_leaderboard_by_power(limit=10):
     with get_db() as conn:
         players = conn.execute("""
-            SELECT user_id, name, character_name, level, pvp_wins 
+            SELECT user_id, name, character_name, level, pvp_wins, power_score 
+            FROM players 
+            WHERE character_name IS NOT NULL 
+            ORDER BY power_score DESC 
+            LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(p) for p in players]
+
+def get_leaderboard_by_level(limit=10):
+    with get_db() as conn:
+        players = conn.execute("""
+            SELECT user_id, name, character_name, level, pvp_wins, power_score 
             FROM players 
             WHERE character_name IS NOT NULL 
             ORDER BY level DESC, pvp_wins DESC 
+            LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(p) for p in players]
+
+def get_leaderboard_by_pvp(limit=10):
+    with get_db() as conn:
+        players = conn.execute("""
+            SELECT user_id, name, character_name, level, pvp_wins, pvp_losses, power_score 
+            FROM players 
+            WHERE character_name IS NOT NULL AND (pvp_wins > 0 OR pvp_losses > 0)
+            ORDER BY pvp_wins DESC 
             LIMIT ?
         """, (limit,)).fetchall()
         return [dict(p) for p in players]
