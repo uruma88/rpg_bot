@@ -805,7 +805,7 @@ def button_handler(update, context):
             pass
         return
     
-    if data.startswith("buy_weapon_"):
+       if data.startswith("buy_weapon_"):
         idx = int(data.split("_")[2])
         player_class = get_player_class(player['character_name'])
         weapon = WEAPONS[player_class][idx]
@@ -824,6 +824,30 @@ def button_handler(update, context):
             query.message.reply_text(f"❌ Не хватает магии! Нужно {weapon['magic_req']}✨", reply_markup=get_back_keyboard())
             query.message.delete()
             return
+        
+        new_gold = player['gold'] - weapon['cost']
+        update_player(user.id, {"gold": new_gold})
+        
+        # Добавляем оружие в инвентарь
+        add_item_to_inventory(user.id, weapon['name'], "weapon", player_class, weapon['bonus_strength'], weapon['bonus_magic'], 0)
+        
+        # Автоматически надеваем оружие
+        current_weapon = player.get("weapon", "Нет")
+        
+        if current_weapon != "Нет":
+            unequip_item(user.id, "weapon")
+        
+        user_items = get_user_items(user.id)
+        for item in user_items:
+            if item['item_name'] == weapon['name'] and item['item_type'] == "weapon":
+                equip_item(user.id, item['item_id'])
+                break
+        
+        update_power_score(user.id)
+        
+        query.message.reply_text(f"✅ Вы купили и надели {weapon['name']}!\n+{weapon['bonus_strength']}⚔️ +{weapon['bonus_magic']}✨!", reply_markup=get_back_keyboard())
+        query.message.delete()
+        return
         
         new_gold = player['gold'] - weapon['cost']
         update_player(user.id, {"gold": new_gold})
