@@ -196,24 +196,24 @@ def fight(player, inventory, loot_items, materials, is_boss=False):
             gold_gain = enemy["gold"]
             log.append(f"✅ Победа! +{xp_gain} XP, +{gold_gain}💰")
             
-            if random.random() < 0.45 and enemy.get("loot"):
-                loot_dropped = random.choice(enemy["loot"])
-                loot_value = LOOT_VALUES.get(loot_dropped, 50)
-                log.append(f"🎁 Вам выпало: {loot_dropped} (можно продать за {loot_value}💰)")
-            
-            if random.random() < 0.6 and enemy.get("materials"):
-                material_dropped = random.choice(enemy["materials"])
-                material_value = LOOT_VALUES.get(material_dropped, 20)
-                log.append(f"🔧 Вам выпал материал: {material_dropped}")
-            
-            new_xp = player["xp"] + xp_gain
+            # Накопленный опыт (старый)
+            current_xp = player["xp"]
+            # Новый опыт для повышения уровня
+            new_xp = current_xp + xp_gain
             old_level = player["level"]
             new_level = old_level
+            
+            # Очки навыков (skill points) - отдельно от XP
+            skill_points = player.get("skill_points", 0)
+            total_xp_gained = 0
+            
             while new_xp >= get_next_xp(new_level):
                 new_xp -= get_next_xp(new_level)
                 new_level += 1
-                log.append(f"🎉 ПОВЫШЕНИЕ УРОВНЯ ДО {new_level}!")
+                skill_points += 3  # Даём 3 очка навыков за уровень
+                log.append(f"🎉 ПОВЫШЕНИЕ УРОВНЯ ДО {new_level}! Получено 3 очка навыков!")
             
+            # Обновляем статы при повышении уровня
             if new_level > old_level:
                 player["max_hp"] += 15
                 player["hp"] = player["max_hp"]
@@ -222,9 +222,11 @@ def fight(player, inventory, loot_items, materials, is_boss=False):
                 player["strength"] += 3
                 player["magic"] += 3
             
+            # Сохраняем: XP (для уровня) и skill_points (для прокачки)
             player.update({
                 "xp": new_xp,
                 "level": new_level,
+                "skill_points": skill_points,
                 "hp": player_hp,
                 "max_hp": player["max_hp"],
                 "max_mana": player["max_mana"],
@@ -233,6 +235,15 @@ def fight(player, inventory, loot_items, materials, is_boss=False):
                 "gold": player["gold"] + gold_gain
             })
             return "\n".join(log), player, inventory, loot_items, materials, loot_dropped, loot_value, material_dropped, material_value
+        
+        enemy_damage = random.randint(1, enemy["atk"])
+        player_hp -= enemy_damage
+        log.append(f"💥 {enemy['name']} атакует и наносит {enemy_damage} урона. У вас {max(0, player_hp)} HP.")
+    
+    log.append("💀 Вы проиграли. Вас воскресили с 50% HP и MP.")
+    player["hp"] = player["max_hp"] // 2
+    player["mana"] = player["max_mana"] // 2
+    return "\n".join(log), player, inventory, loot_items, materials, None, 0, None, 0
         
         enemy_damage = random.randint(1, enemy["atk"])
         player_hp -= enemy_damage
