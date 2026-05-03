@@ -6,7 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 
 from config import TOKEN
-from db import init_db, get_player, create_player, update_player, update_inventory, set_character, add_loot_item, remove_loot_item, add_material, remove_material, update_power_score, get_leaderboard_by_power, get_leaderboard_by_level, get_leaderboard_by_pvp
+from db import init_db, get_player, create_player, update_player, update_inventory, set_character, add_loot_item, remove_loot_item, add_material, remove_material, add_item_to_inventory, get_user_items, equip_item, unequip_item, update_power_score, get_leaderboard_by_power, get_leaderboard_by_level, get_leaderboard_by_pvp
 from game import fight, get_next_xp, LOOT_VALUES, WEAPONS, ARMOR, get_weapon_upgrade, get_armor_upgrade
 
 logging.basicConfig(level=logging.INFO)
@@ -57,7 +57,7 @@ def get_main_keyboard():
         [InlineKeyboardButton("🏆 Рейтинг", callback_data="leaderboard_menu")],
         [InlineKeyboardButton("⚔️ PvP Бой", callback_data="pvp")],
         [InlineKeyboardButton("👤 Профиль", callback_data="profile")],
-        [InlineKeyboardButton("⚔️ Экипировка", callback_data="equipment")],  # Новая кнопка
+        [InlineKeyboardButton("⚔️ Экипировка", callback_data="equipment")],
         [InlineKeyboardButton("🎒 Инвентарь", callback_data="inv")],
         [InlineKeyboardButton("💊 Зелье", callback_data="potion")],
         [InlineKeyboardButton("📈 Прокачка", callback_data="upgrade")],
@@ -105,7 +105,7 @@ def get_class_keyboard(character_name):
 
 def start(update, context):
     user = update.effective_user
-    player, _, _, _ = get_player(user.id)
+    player, _, _, _, _ = get_player(user.id)
     
     if player and player.get("character_name"):
         show_main_menu(update, context, player)
@@ -175,8 +175,8 @@ def show_main_menu(update, context, player):
             f"🌟 XP: {player['xp']}/{get_next_xp(player['level'])} (ур. {player['level']})\n"
             f"💰 Золото: {player['gold']}\n"
             f"⚡ Power Score: {player.get('power_score', 0)}\n"
-            f"⚔️ Оружие: {player.get('weapon', 'Нет')} +{player.get('weapon_level', 1)}\n"
-            f"🛡️ Броня: {player.get('armor', 'Нет')} +{player.get('armor_level', 1)}")
+            f"⚔️ Оружие: {player.get('weapon', 'Нет')}\n"
+            f"🛡️ Броня: {player.get('armor', 'Нет')}")
     
     photo_path = player.get("photo_path")
     
@@ -234,6 +234,69 @@ def show_leaderboard_power(update, context):
     except:
         pass
 
+def show_equipment_menu(update, context, player, user_items):
+    """Показывает меню экипировки с кнопками смены"""
+    current_weapon = player.get('weapon', 'Нет')
+    current_armor = player.get('armor', 'Нет')
+    
+    text = (f"⚔️ ЭКИПИРОВКА ⚔️\n\n"
+            f"🗡️ ОРУЖИЕ: {current_weapon}\n"
+            f"🛡️ БРОНЯ: {current_armor}\n\n"
+            f"Выбери действие:")
+    
+    keyboard = [
+        [InlineKeyboardButton("🗡️ Сменить оружие", callback_data="change_weapon")],
+        [InlineKeyboardButton("🛡️ Сменить броню", callback_data="change_armor")],
+        [InlineKeyboardButton("🗑️ Снять оружие", callback_data="unequip_weapon")],
+        [InlineKeyboardButton("🗑️ Снять броню", callback_data="unequip_armor")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="profile")],
+    ]
+    try:
+        update.callback_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        update.callback_query.message.delete()
+    except:
+        pass
+
+def show_items_list(update, context, item_type):
+    """Показывает список предметов определённого типа для смены"""
+    user = update.callback_query.from_user
+    player, _, _, _, user_items = get_player(user.id)
+    
+    items = [item for item in user_items if item['item_type'] == item_type]
+    
+    if not items:
+        text = f"❌ У вас нет {item_type} для смены!\n\nКупите {item_type} в магазине."
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="equipment")]]
+        try:
+            update.callback_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+            update.callback_query.message.delete()
+        except:
+            pass
+        return
+    
+    text = f"🗡️ ВЫБЕРИ {item_type.upper()} 🗡️\n\n"
+    keyboard = []
+    for item in items:
+        status = "✅" if item['equipped'] == 1 else "📦"
+        text += f"{status} {item['item_name']}\n"
+        if item['bonus_strength'] > 0:
+            text += f"   +{item['bonus_strength']}⚔️ "
+        if item['bonus_magic'] > 0:
+            text += f"+{item['bonus_magic']}✨ "
+        if item['bonus_hp'] > 0:
+            text += f"+{item['bonus_hp']}❤️"
+        text += "\n\n"
+        if item['equipped'] == 0:
+            keyboard.append([InlineKeyboardButton(f"🔹 Надеть {item['item_name']}", callback_data=f"equip_{item['item_id']}")])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="equipment")])
+    
+    try:
+        update.callback_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        update.callback_query.message.delete()
+    except:
+        pass
+
 def pvp_fight(player1, player2):
     p1_hp = player1["hp"]
     p2_hp = player2["hp"]
@@ -273,7 +336,7 @@ def button_handler(update, context):
     user = query.from_user
     data = query.data
     
-    player, inventory, loot_items, materials = get_player(user.id)
+    player, inventory, loot_items, materials, user_items = get_player(user.id)
     
     # Навигация по выбору персонажа
     if data == "show_character_list":
@@ -331,7 +394,7 @@ def button_handler(update, context):
         })
         
         update_power_score(user.id)
-        player, _, _, _ = get_player(user.id)
+        player, _, _, _, _ = get_player(user.id)
         show_main_menu(update, context, player)
         return
     
@@ -341,6 +404,41 @@ def button_handler(update, context):
             query.message.delete()
         except:
             pass
+        return
+    
+    # Экипировка
+    if data == "equipment":
+        show_equipment_menu(update, context, player, user_items)
+        return
+    
+    if data == "change_weapon":
+        show_items_list(update, context, "weapon")
+        return
+    
+    if data == "change_armor":
+        show_items_list(update, context, "armor")
+        return
+    
+    if data == "unequip_weapon":
+        success, message = unequip_item(user.id, "weapon")
+        update_power_score(user.id)
+        query.message.reply_text(message, reply_markup=get_back_keyboard())
+        query.message.delete()
+        return
+    
+    if data == "unequip_armor":
+        success, message = unequip_item(user.id, "armor")
+        update_power_score(user.id)
+        query.message.reply_text(message, reply_markup=get_back_keyboard())
+        query.message.delete()
+        return
+    
+    if data.startswith("equip_"):
+        item_id = int(data.split("_")[1])
+        success, message = equip_item(user.id, item_id)
+        update_power_score(user.id)
+        query.message.reply_text(message, reply_markup=get_back_keyboard())
+        query.message.delete()
         return
     
     # Рейтинги
@@ -401,7 +499,7 @@ def button_handler(update, context):
             return
         
         opponent_data = random.choice(opponents)
-        opponent, _, _, _ = get_player(opponent_data['user_id'])
+        opponent, _, _, _, _ = get_player(opponent_data['user_id'])
         
         if not opponent:
             try:
@@ -445,8 +543,8 @@ def button_handler(update, context):
         player_class = get_player_class(player['character_name'])
         text = ("⚒️ КУЗНЕЦ ⚒️\n\n"
                 "Я могу улучшить твоё оружие и броню!\n\n"
-                f"Текущее оружие: {player.get('weapon', 'Нет')} +{player.get('weapon_level', 1)}\n"
-                f"Текущая броня: {player.get('armor', 'Нет')} +{player.get('armor_level', 1)}\n\n"
+                f"Текущее оружие: {player.get('weapon', 'Нет')}\n"
+                f"Текущая броня: {player.get('armor', 'Нет')}\n\n"
                 "Для улучшения нужны материалы и золото.")
         keyboard = [
             [InlineKeyboardButton("⚔️ Улучшить оружие", callback_data="upgrade_weapon")],
@@ -475,8 +573,8 @@ def button_handler(update, context):
             query.message.delete()
             return
         
-        text = f"⚔️ УЛУЧШЕНИЕ ОРУЖИЯ ⚔️\n\n{current_weapon} +{player.get('weapon_level', 1)}\n\n"
-        text += f"Для улучшения до +{player.get('weapon_level', 1) + 1} нужно:\n"
+        text = f"⚔️ УЛУЧШЕНИЕ ОРУЖИЯ ⚔️\n\n{current_weapon}\n\n"
+        text += f"Для улучшения нужно:\n"
         text += f"💰 Золото: 200\n"
         for mat, qty in upgrade_cost.items():
             text += f"🔧 {mat}: {qty} шт.\n"
@@ -527,12 +625,11 @@ def button_handler(update, context):
             remove_material(user.id, mat, qty)
         update_player(user.id, {"gold": player["gold"] - 200})
         
-        new_level = player.get("weapon_level", 1) + 1
         new_strength = player["strength"] + upgrade_bonus
-        update_player(user.id, {"weapon_level": new_level, "strength": new_strength})
+        update_player(user.id, {"strength": new_strength})
         
         update_power_score(user.id)
-        query.message.reply_text(f"✅ Оружие улучшено до +{new_level}!\n+{upgrade_bonus} к силе!", reply_markup=get_back_keyboard())
+        query.message.reply_text(f"✅ Оружие улучшено!\n+{upgrade_bonus} к силе!", reply_markup=get_back_keyboard())
         query.message.delete()
         return
     
@@ -551,8 +648,8 @@ def button_handler(update, context):
             query.message.delete()
             return
         
-        text = f"🛡️ УЛУЧШЕНИЕ БРОНИ 🛡️\n\n{current_armor} +{player.get('armor_level', 1)}\n\n"
-        text += f"Для улучшения до +{player.get('armor_level', 1) + 1} нужно:\n"
+        text = f"🛡️ УЛУЧШЕНИЕ БРОНИ 🛡️\n\n{current_armor}\n\n"
+        text += f"Для улучшения нужно:\n"
         text += f"💰 Золото: 200\n"
         for mat, qty in upgrade_cost.items():
             text += f"🔧 {mat}: {qty} шт.\n"
@@ -603,13 +700,12 @@ def button_handler(update, context):
             remove_material(user.id, mat, qty)
         update_player(user.id, {"gold": player["gold"] - 200})
         
-        new_level = player.get("armor_level", 1) + 1
         new_max_hp = player["max_hp"] + upgrade_bonus
         new_hp = player["hp"] + upgrade_bonus
-        update_player(user.id, {"armor_level": new_level, "max_hp": new_max_hp, "hp": new_hp})
+        update_player(user.id, {"max_hp": new_max_hp, "hp": new_hp})
         
         update_power_score(user.id)
-        query.message.reply_text(f"✅ Броня улучшена до +{new_level}!\n+{upgrade_bonus} к HP!", reply_markup=get_back_keyboard())
+        query.message.reply_text(f"✅ Броня улучшена!\n+{upgrade_bonus} к HP!", reply_markup=get_back_keyboard())
         query.message.delete()
         return
     
@@ -700,7 +796,7 @@ def button_handler(update, context):
             if weapon.get('magic_req', 0) > 0:
                 text += f"   Треб: Магия {weapon['magic_req']}\n"
             text += f"   +{weapon['bonus_strength']}⚔️ +{weapon['bonus_magic']}✨  Цена: {weapon['cost']}💰\n\n"
-            keyboard.append([InlineKeyboardButton(f"{weapon['name']} - {weapon['cost']}💰", callback_data=f"buy_weapon_{i}")])
+            keyboard.append([InlineKeyboardButton(f"Купить {weapon['name']} - {weapon['cost']}💰", callback_data=f"buy_weapon_{i}")])
         keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="shop_main")])
         try:
             query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -729,13 +825,12 @@ def button_handler(update, context):
             query.message.delete()
             return
         
-        new_strength = player['strength'] + weapon['bonus_strength']
-        new_magic = player['magic'] + weapon['bonus_magic']
         new_gold = player['gold'] - weapon['cost']
+        update_player(user.id, {"gold": new_gold})
         
-        update_player(user.id, {"strength": new_strength, "magic": new_magic, "gold": new_gold, "weapon": weapon['name'], "weapon_level": 1})
-        update_power_score(user.id)
-        query.message.reply_text(f"✅ Вы купили {weapon['name']}!\n+{weapon['bonus_strength']}⚔️ +{weapon['bonus_magic']}✨", reply_markup=get_back_keyboard())
+        add_item_to_inventory(user.id, weapon['name'], "weapon", player_class, weapon['bonus_strength'], weapon['bonus_magic'], 0)
+        
+        query.message.reply_text(f"✅ Вы купили {weapon['name']}!\nТеперь наденьте его в меню 'Экипировка'", reply_markup=get_back_keyboard())
         query.message.delete()
         return
     
@@ -753,7 +848,7 @@ def button_handler(update, context):
             if armor.get('magic_req', 0) > 0:
                 text += f"   Треб: Магия {armor['magic_req']}\n"
             text += f"   +{armor['bonus_hp']}❤️  Цена: {armor['cost']}💰\n\n"
-            keyboard.append([InlineKeyboardButton(f"{armor['name']} - {armor['cost']}💰", callback_data=f"buy_armor_{i}")])
+            keyboard.append([InlineKeyboardButton(f"Купить {armor['name']} - {armor['cost']}💰", callback_data=f"buy_armor_{i}")])
         keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="shop_main")])
         try:
             query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -782,13 +877,12 @@ def button_handler(update, context):
             query.message.delete()
             return
         
-        new_max_hp = player['max_hp'] + armor['bonus_hp']
-        new_hp = player['hp'] + armor['bonus_hp']
         new_gold = player['gold'] - armor['cost']
+        update_player(user.id, {"gold": new_gold})
         
-        update_player(user.id, {"max_hp": new_max_hp, "hp": new_hp, "gold": new_gold, "armor": armor['name'], "armor_level": 1})
-        update_power_score(user.id)
-        query.message.reply_text(f"✅ Вы купили {armor['name']}!\n+{armor['bonus_hp']}❤️ к HP!", reply_markup=get_back_keyboard())
+        add_item_to_inventory(user.id, armor['name'], "armor", player_class, 0, 0, armor['bonus_hp'])
+        
+        query.message.reply_text(f"✅ Вы купили {armor['name']}!\nТеперь наденьте её в меню 'Экипировка'", reply_markup=get_back_keyboard())
         query.message.delete()
         return
     
@@ -878,7 +972,7 @@ def button_handler(update, context):
             remove_loot_item(user.id, item_name)
             query.message.reply_text(f"✅ Вы продали {item_name} за {value}💰!", reply_markup=get_back_keyboard())
             query.message.delete()
-            player, _, _, _ = get_player(user.id)
+            player, _, _, _, _ = get_player(user.id)
         else:
             query.message.reply_text("❌ Предмет не найден!", reply_markup=get_back_keyboard())
             query.message.delete()
@@ -1019,112 +1113,7 @@ def button_handler(update, context):
             query.message.reply_text(f"❌ Не хватает XP! Нужно {EXP_COST_PER_STAT} XP", reply_markup=get_back_keyboard())
             query.message.delete()
         return
-    # Экипировка
-    if data == "equipment":
-        player_class = get_player_class(player['character_name'])
-        current_weapon = player.get('weapon', 'Нет')
-        current_armor = player.get('armor', 'Нет')
-        
-        # Находим бонусы текущего оружия
-        weapon_bonus_strength = 0
-        weapon_bonus_magic = 0
-        for weapon in WEAPONS[player_class]:
-            if weapon['name'] == current_weapon:
-                weapon_bonus_strength = weapon.get('bonus_strength', 0)
-                weapon_bonus_magic = weapon.get('bonus_magic', 0)
-                break
-        
-        # Находим бонусы текущей брони
-        armor_bonus_hp = 0
-        for armor in ARMOR[player_class]:
-            if armor['name'] == current_armor:
-                armor_bonus_hp = armor.get('bonus_hp', 0)
-                break
-        
-        text = ("⚔️ ЭКИПИРОВКА ⚔️\n\n"
-                f"🗡️ ОРУЖИЕ: {current_weapon}\n"
-                f"   +{weapon_bonus_strength}⚔️ к силе\n"
-                f"   +{weapon_bonus_magic}✨ к магии\n\n"
-                f"🛡️ БРОНЯ: {current_armor}\n"
-                f"   +{armor_bonus_hp}❤️ к HP\n\n"
-                "Выбери действие:")
-        
-        keyboard = [
-            [InlineKeyboardButton("⚔️ Сменить оружие", callback_data="change_weapon")],
-            [InlineKeyboardButton("🛡️ Сменить броню", callback_data="change_armor")],
-            [InlineKeyboardButton("🗑️ Снять всё", callback_data="unequip_all")],
-            [InlineKeyboardButton("🔙 Назад", callback_data="profile")],
-        ]
-        try:
-            query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-            query.message.delete()
-        except:
-            pass
-        return
-    
-    if data == "change_weapon":
-        # Здесь нужно показывать список купленного оружия из отдельной таблицы
-        # Для простоты покажем, что нужно сначала купить оружие в магазине
-        query.message.reply_text(
-            "⚔️ СМЕНА ОРУЖИЯ ⚔️\n\n"
-            "Пока эта функция в разработке.\n\n"
-            "Купи оружие в магазине, и оно автоматически наденется!\n"
-            "Скоро добавим возможность переодеваться.",
-            reply_markup=get_back_keyboard()
-        )
-        query.message.delete()
-        return
-    
-    if data == "change_armor":
-        query.message.reply_text(
-            "🛡️ СМЕНА БРОНИ 🛡️\n\n"
-            "Пока эта функция в разработке.\n\n"
-            "Купи броню в магазине, и она автоматически наденется!\n"
-            "Скоро добавим возможность переодеваться.",
-            reply_markup=get_back_keyboard()
-        )
-        query.message.delete()
-        return
-    
-    if data == "unequip_all":
-        current_weapon = player.get('weapon', 'Нет')
-        current_armor = player.get('armor', 'Нет')
-        
-        # Снимаем оружие (возвращаем базовые статы)
-        player_class = get_player_class(player['character_name'])
-        weapon_bonus_strength = 0
-        weapon_bonus_magic = 0
-        for weapon in WEAPONS[player_class]:
-            if weapon['name'] == current_weapon:
-                weapon_bonus_strength = weapon.get('bonus_strength', 0)
-                weapon_bonus_magic = weapon.get('bonus_magic', 0)
-                break
-        
-        armor_bonus_hp = 0
-        for armor in ARMOR[player_class]:
-            if armor['name'] == current_armor:
-                armor_bonus_hp = armor.get('bonus_hp', 0)
-                break
-        
-        new_strength = player['strength'] - weapon_bonus_strength
-        new_magic = player['magic'] - weapon_bonus_magic
-        new_max_hp = player['max_hp'] - armor_bonus_hp
-        new_hp = min(player['hp'], new_max_hp)
-        
-        update_player(user.id, {
-            "strength": new_strength,
-            "magic": new_magic,
-            "max_hp": new_max_hp,
-            "hp": new_hp,
-            "weapon": "Нет",
-            "armor": "Нет"
-        })
-        update_power_score(user.id)
-        
-        query.message.reply_text("✅ Вы сняли всю экипировку!", reply_markup=get_back_keyboard())
-        query.message.delete()
-        return
-        
+
 def main():
     updater = Updater(TOKEN)
     dp = updater.dispatcher
