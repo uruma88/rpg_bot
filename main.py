@@ -558,20 +558,47 @@ def button_handler(update, context):
             pass
         return
     
-    if data == "upgrade_weapon":
+        if data == "upgrade_weapon":
         current_weapon = player.get("weapon", "Нет")
         if current_weapon == "Нет":
-            query.message.reply_text("❌ У вас нет оружия для улучшения! Купите оружие в магазине.", reply_markup=get_back_keyboard())
+            query.message.reply_text("❌ У вас нет оружия для улучшения! Купите и наденьте оружие в магазине.", reply_markup=get_back_keyboard())
             query.message.delete()
             return
         
+        # Находим бонус для улучшения
         player_class = get_player_class(player['character_name'])
-        upgrade_cost, upgrade_bonus = get_weapon_upgrade(current_weapon, player_class)
+        
+        # Ищем улучшение по названию оружия
+        upgrade_cost = None
+        upgrade_bonus = 0
+        for weapon in WEAPONS[player_class]:
+            if weapon['name'] == current_weapon:
+                upgrade_cost = weapon.get('upgrade_cost')
+                upgrade_bonus = weapon.get('upgrade_bonus', 0)
+                break
         
         if not upgrade_cost:
             query.message.reply_text("❌ Это оружие нельзя улучшить!", reply_markup=get_back_keyboard())
             query.message.delete()
             return
+        
+        text = f"⚔️ УЛУЧШЕНИЕ ОРУЖИЯ ⚔️\n\n{current_weapon}\n\n"
+        text += f"Для улучшения нужно:\n"
+        text += f"💰 Золото: 200\n"
+        for mat, qty in upgrade_cost.items():
+            text += f"🔧 {mat}: {qty} шт.\n"
+        text += f"\n✨ Эффект: +{upgrade_bonus} к силе"
+        
+        keyboard = [
+            [InlineKeyboardButton("✅ Улучшить", callback_data="do_upgrade_weapon")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="blacksmith")],
+        ]
+        try:
+            query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+            query.message.delete()
+        except:
+            pass
+        return
         
         text = f"⚔️ УЛУЧШЕНИЕ ОРУЖИЯ ⚔️\n\n{current_weapon}\n\n"
         text += f"Для улучшения нужно:\n"
